@@ -1,0 +1,238 @@
+image.png{% extends "base.html" %}
+
+{% block title %}RDE Parameters - Layer Study{% endblock %}
+
+{% block content %}
+<div class="study-creation-container">
+    <!-- Progress Bar -->
+    {{ study_progress_bar('layer_iped', 'layer', draft) }}
+
+    <div class="step-content">
+        <div class="step-header">
+            <h1 class="step-title">RDE Algorithm Parameters</h1>
+            <p class="step-description">Configure the parameters that will be used to generate the RDE task matrix for your layer study</p>
+        </div>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <!-- Calculate total images for display -->
+        {% set total_images_calculated = 0 %}
+        {% set layer_image_counts = [] %}
+        {% set uniqueness_capacity_calculated = 1 %}
+        {% set tasks_per_consumer_calculated = 24 %}
+        
+        {% if draft.layer_config_data and draft.layer_config_data.layers %}
+            {% for layer in draft.layer_config_data.layers %}
+                {% set total_images_calculated = total_images_calculated + layer.images|length %}
+                {% set _ = layer_image_counts.append(layer.images|length) %}
+                {% set uniqueness_capacity_calculated = uniqueness_capacity_calculated * layer.images|length %}
+            {% endfor %}
+            
+            <!-- Calculate tasks per consumer based on original layers_config.py logic -->
+            {% if uniqueness_capacity_calculated < 24 %}
+                {% set tasks_per_consumer_calculated = uniqueness_capacity_calculated %}
+            {% endif %}
+        {% endif %}
+        
+        <form method="POST" class="step-form" data-validate="true">
+            {{ form.hidden_tag() }}
+            
+            <div class="form-section">
+                <h3>⚙️ RDE Algorithm Parameters</h3>
+                <p class="form-help">Configure the parameters that will be used to generate the RDE task matrix.</p>
+                
+                <div class="form-grid">
+                    <div class="form-group">
+                        {{ form.number_of_respondents.label(class="form-label form-label--required") }}
+                        {{ form.number_of_respondents(class="form-control") }}
+                        {% if form.number_of_respondents.errors %}
+                            <div class="error-message">
+                                {% for error in form.number_of_respondents.errors %}
+                                    <span>{{ error }}</span>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <small class="form-help">Number of respondents who will participate in your study</small>
+                    </div>
+                </div>
+                
+                <!-- Fixed Parameters (as per original layers_config.py logic) -->
+                <div class="fixed-parameters-section">
+                    <h4>Fixed Parameters</h4>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <strong>Exposure Tolerance:</strong> 
+                            <span class="fixed-value">2.0% (Fixed)</span>
+                        </div>
+                        <div class="info-item">
+                            <strong>Random Seed:</strong> 
+                            <span class="fixed-value">Not Used</span>
+                        </div>
+                    </div>
+                    <small class="form-help">
+                        These parameters are fixed based on the original layer study algorithm design.
+                    </small>
+                </div>
+
+                <!-- Auto-calculated parameters display -->
+                <div class="auto-calculated-section">
+                    <div class="section-header">
+                        <h4>Auto-calculated Parameters</h4>
+                        <button type="button" class="btn btn--sm btn--secondary" onclick="refreshParameters()" title="Refresh parameters">
+                            <span class="btn-icon">🔄</span> Refresh
+                        </button>
+                    </div>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <strong>Total Layers:</strong> 
+                            <span id="total-layers-display">{{ layer_config_data.layers|length if layer_config_data and layer_config_data.layers else 0 }}</span>
+                        </div>
+                        <div class="info-item">
+                            <strong>Total Images:</strong> 
+                            <span id="total-images-display">
+                                {% if layer_config_data and layer_config_data.layers %}
+                                    {% set total_images = 0 %}
+                                    {% for layer in layer_config_data.layers %}
+                                        {% set total_images = total_images + layer.images|length %}
+                                    {% endfor %}
+                                    {{ total_images }}
+                                {% else %}
+                                    0
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="info-item">
+                            <strong>Tasks per Consumer:</strong> 
+                            <span id="tasks-per-consumer-display">{{ tasks_per_consumer_calculated }}</span>
+                        </div>
+                        <div class="info-item">
+                            <strong>Uniqueness Capacity:</strong> 
+                            <span id="uniqueness-capacity-display">{{ uniqueness_capacity_calculated }}</span>
+                        </div>
+                    </div>
+                    <small class="form-help">
+                        These values are automatically calculated based on your layer configuration. 
+                        Click "Refresh" to recalculate after making changes to layers.
+                    </small>
+                </div>
+            </div>
+            
+            <div class="step-actions">
+                <a href="{{ url_for('study_creation.step2b') }}" class="btn btn--secondary step-nav-btn">← Previous</a>
+                {{ form.submit(class="btn btn--primary step-nav-btn") }}
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Calculate and display auto-calculated parameters
+    function updateCalculatedParameters() {
+        const numRespondents = parseInt(document.getElementById('{{ form.number_of_respondents.id }}').value) || 0;
+        
+        if (numRespondents > 0) {
+            // Get layer data from the page
+            const totalLayers = {{ layer_config_data.layers|length if layer_config_data and layer_config_data.layers else 0 }};
+            const totalImages = {{ total_images_calculated }};
+            
+            if (totalLayers > 0 && totalImages > 0) {
+                // Use pre-calculated values from template
+                const tasksPerConsumer = {{ tasks_per_consumer_calculated }};
+                const uniquenessCapacity = {{ uniqueness_capacity_calculated }};
+                
+                document.getElementById('tasks-per-consumer-display').textContent = `${tasksPerConsumer}`;
+                document.getElementById('uniqueness-capacity-display').textContent = `${uniquenessCapacity}`;
+            } else {
+                document.getElementById('tasks-per-consumer-display').textContent = 'Configure layers first';
+                document.getElementById('uniqueness-capacity-display').textContent = 'Configure layers first';
+            }
+        } else {
+            document.getElementById('tasks-per-consumer-display').textContent = 'Enter number of respondents';
+            document.getElementById('uniqueness-capacity-display').textContent = 'Enter number of respondents';
+        }
+    }
+    
+    // Refresh parameters from server
+    window.refreshParameters = function() {
+        const refreshBtn = document.querySelector('button[onclick="refreshParameters()"]');
+        const originalText = refreshBtn.innerHTML;
+        
+        // Show loading state
+        refreshBtn.innerHTML = '<span class="btn-icon">⏳</span> Calculating...';
+        refreshBtn.disabled = true;
+        
+        fetch('{{ url_for("study_creation.calculate_layer_parameters") }}')
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    console.error('Error refreshing parameters:', data.error);
+                    return;
+                }
+                
+                // Update display values
+                document.getElementById('total-layers-display').textContent = data.total_layers;
+                document.getElementById('total-images-display').textContent = data.total_images;
+                document.getElementById('tasks-per-consumer-display').textContent = data.tasks_per_consumer;
+                document.getElementById('uniqueness-capacity-display').textContent = data.uniqueness_capacity;
+                
+                // Show success message
+                showToast('Parameters refreshed successfully!', 'success');
+            })
+            .catch(error => {
+                console.error('Error refreshing parameters:', error);
+                showToast('Error refreshing parameters. Please try again.', 'error');
+            })
+            .finally(() => {
+                // Restore button state
+                refreshBtn.innerHTML = originalText;
+                refreshBtn.disabled = false;
+            });
+    };
+    
+    // Simple toast notification function
+    function showToast(message, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
+            color: white;
+            padding: 12px 20px;
+            border-radius: 6px;
+            z-index: 1000;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        `;
+        toast.textContent = message;
+        
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+        }, 3000);
+    }
+    
+    // Update when number of respondents changes
+    document.getElementById('{{ form.number_of_respondents.id }}').addEventListener('input', updateCalculatedParameters);
+    
+    // Initial calculation
+    updateCalculatedParameters();
+});
+</script>
+{% endblock %}

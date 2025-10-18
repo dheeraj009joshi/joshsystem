@@ -1,0 +1,451 @@
+{% extends "base.html" %}
+
+{% block title %}{{ study.title }} - Study Details{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<header class="page-header">
+    <div class="container">
+        <div class="page-header-content">
+            <div class="page-header-text">
+                <h1>{{ study.title }}</h1>
+                <p class="page-header-subtitle">{{ study.study_type|title }}-based RDE Research Study</p>
+            </div>
+            <div class="page-header-actions">
+                {% if study.status == 'draft' %}
+                    <button class="btn btn--success" onclick="changeStudyStatus('{{ study._id }}', 'active')">
+                        🚀 Activate Study
+                    </button>
+                {% elif study.status == 'active' %}
+                    <button class="btn btn--warning" onclick="changeStudyStatus('{{ study._id }}', 'paused')">
+                        ⏸️ Pause Study
+                    </button>
+                {% elif study.status == 'paused' %}
+                    <button class="btn btn--success" onclick="changeStudyStatus('{{ study._id }}', 'active')">
+                        ▶️ Resume Study
+                    </button>
+                {% endif %}
+                
+                {% if study.status in ['active', 'paused'] %}
+                    <button class="btn btn--info" onclick="changeStudyStatus('{{ study._id }}', 'completed')">
+                        ✅ Mark Complete
+                    </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</header>
+
+<!-- Breadcrumb -->
+<nav class="page-breadcrumb">
+    <div class="container">
+        <ul class="breadcrumb-list">
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('dashboard.index') }}" class="breadcrumb-link">Dashboard</a>
+                <span class="breadcrumb-separator">/</span>
+            </li>
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('dashboard.studies') }}" class="breadcrumb-link">Studies</a>
+                <span class="breadcrumb-separator">/</span>
+            </li>
+            <li class="breadcrumb-item">
+                <span class="breadcrumb-current">{{ study.title }}</span>
+            </li>
+        </ul>
+    </div>
+</nav>
+
+<div class="container">
+    <!-- Study Detail Header -->
+    <div class="study-detail-header">
+        <div class="study-detail-main">
+            <h2 class="study-detail-title">{{ study.title }}</h2>
+            <div class="study-detail-meta">
+                <div class="study-meta-item">
+                    <span class="study-meta-label">Status</span>
+                    <span class="study-status-badge study-status-badge--{{ study.status }}">{{ study.status|title }}</span>
+                </div>
+                <div class="study-meta-item">
+                    <span class="study-meta-label">Type</span>
+                    <span class="study-meta-value">{{ study.study_type|title }}-based</span>
+                </div>
+                <div class="study-meta-item">
+                    <span class="study-meta-label">Created</span>
+                    <span class="study-meta-value">{{ study.created_at.strftime('%B %d, %Y') }}</span>
+                </div>
+                {% if study.launched_at %}
+                <div class="study-meta-item">
+                    <span class="study-meta-label">Launched</span>
+                    <span class="study-meta-value">{{ study.launched_at.strftime('%B %d, %Y') }}</span>
+                </div>
+                {% endif %}
+            </div>
+            <div class="study-detail-actions">
+                {% if study.status == 'draft' %}
+                    <a href="{{ url_for('dashboard.edit_study', study_id=study._id) }}" class="btn btn--outline">✏️ Edit Study</a>
+                {% endif %}
+                <a href="{{ url_for('dashboard.study_share', study_id=study._id) }}" class="btn btn--secondary">🔗 Share</a>
+                <a href="{{ url_for('dashboard.study_preview', study_id=study._id) }}" class="btn btn--info">👁️ Preview</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Study Overview -->
+    <div class="content-section">
+        <div class="section-header">
+            <h2 class="section-title">Study Overview</h2>
+        </div>
+        <div class="card">
+            <div class="card-body">
+                <div class="study-form-row">
+                    <div class="study-form-group">
+                        <label class="study-form-label">Background</label>
+                        <p>{{ study.background }}</p>
+                    </div>
+                    <div class="study-form-group">
+                        <label class="study-form-label">Main Question</label>
+                        <p>{{ study.main_question }}</p>
+                    </div>
+                </div>
+                <div class="study-form-group">
+                    <label class="study-form-label">Orientation Text</label>
+                    <p>{{ study.orientation_text }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Response Statistics -->
+    <div class="content-section">
+        <div class="section-header">
+            <h2 class="section-title">Response Statistics</h2>
+        </div>
+        
+        {% if load_stats_async %}
+        <!-- Loading Animation for Response Statistics -->
+        <div id="response-stats-loading" class="response-stats-loading">
+            <div class="loading-spinner-large"></div>
+            <div class="loading-text">Loading response statistics...</div>
+        </div>
+        {% endif %}
+        
+        <div class="analytics-grid" id="response-stats-grid" {% if load_stats_async %}style="display: none;"{% endif %}>
+            <div class="analytics-card">
+                <div class="analytics-number" id="top-total-responses">{{ total_responses }}</div>
+                <div class="analytics-label">Total Responses</div>
+            </div>
+            <div class="analytics-card">
+                <div class="analytics-number" id="top-completed-responses">{{ completed_responses }}</div>
+                <div class="analytics-label">Completed</div>
+            </div>
+            <div class="analytics-card">
+                <div class="analytics-number" id="top-abandoned-responses">{{ abandoned_responses }}</div>
+                <div class="analytics-label">Abandoned</div>
+            </div>
+            <div class="analytics-card">
+                <div class="analytics-number" id="top-in-progress-responses">{{ in_progress_responses }}</div>
+                <div class="analytics-label">In Progress</div>
+            </div>
+            <div class="analytics-card">
+                <div class="analytics-number" id="top-completion-rate">{{ "%.1f"|format(completion_rate) }}%</div>
+                <div class="analytics-label">Completion Rate</div>
+            </div>
+            <div class="analytics-card">
+                <div class="analytics-number" id="top-avg-task-time">{{ "%.1f"|format(avg_task_time) }}s</div>
+                <div class="analytics-label">Avg Task Time</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Study Configuration -->
+    <div class="content-section">
+        <div class="section-header">
+            <h2 class="section-title">Study Configuration</h2>
+        </div>
+        <div class="card">
+            <div class="card-body">
+                <div class="study-form-row">
+                    <div class="study-form-group">
+                        <label class="study-form-label">Rating Scale</label>
+                        <p>{{ study.rating_scale.min_value }} to {{ study.rating_scale.max_value }}</p>
+                        <small>{{ study.rating_scale.min_label }} - {{ study.rating_scale.max_label }}</small>
+                    </div>
+                    <div class="study-form-group">
+                        <label class="study-form-label">Elements</label>
+                        <p>{{ study.elements|length }} elements</p>
+                        <small>{{ study.study_type|title }}-based</small>
+                    </div>
+                </div>
+                <div class="study-form-row">
+                    <div class="study-form-group">
+                        <label class="study-form-label">RDE Parameters</label>
+                        <p>{{ study.iped_parameters.tasks_per_consumer }} tasks × {{ study.iped_parameters.number_of_respondents }} respondents</p>
+                        <small>{{ study.iped_parameters.min_active_elements }}-{{ study.iped_parameters.max_active_elements }} active elements per task</small>
+                    </div>
+                    <div class="study-form-group">
+                        <label class="study-form-label">Classification Questions</label>
+                        <p>{{ study.classification_questions|length }} questions</p>
+                        <small>Demographic and classification</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+        <!-- View Responses Section -->
+        <div class="content-section">
+            <div class="section-header">
+                <h2 class="section-title">Study Responses</h2>
+                <p class="section-subtitle">View and analyze all responses for this study</p>
+            </div>
+            <div class="card">
+                <div class="card-body">
+                    <div class="responses-overview">
+                        <div class="responses-stats" id="responses-stats">
+                            <div class="stat-item">
+                                <span class="stat-value" id="total-responses">{{ stats.total_responses }}</span>
+                                <span class="stat-label">Total Responses</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-value" id="completed-responses">{{ stats.completed_responses }}</span>
+                                <span class="stat-label">Completed</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-value" id="abandoned-responses">{{ stats.abandoned_responses }}</span>
+                                <span class="stat-label">Abandoned</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-value" id="in-progress-responses">{{ stats.in_progress_responses }}</span>
+                                <span class="stat-label">In Progress</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-value" id="completion-rate">{{ "%.1f"|format(stats.completion_rate) }}%</span>
+                                <span class="stat-label">Completion Rate</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-value" id="avg-task-time">{{ "%.1f"|format(stats.avg_task_time) }}s</span>
+                                <span class="stat-label">Avg Task Time</span>
+                            </div>
+                        </div>
+                        
+                        {% if load_stats_async %}
+                        <div id="stats-loading" class="stats-loading">
+                            <div class="loading-spinner"></div>
+                            <span class="loading-text">Loading response statistics...</span>
+                        </div>
+                        {% endif %}
+                        <div class="responses-actions">
+                            <a href="{{ url_for('dashboard.study_responses', study_id=study._id) }}" class="btn btn--primary btn--lg">
+                                <span class="btn-icon">📊</span>
+                                View All Responses
+                            </a>
+                            <a href="{{ url_for('dashboard.export_study', study_id=study._id, type='csv') }}" class="btn btn--secondary btn--lg export-btn" data-export-type="CSV">
+                                <span class="btn-icon">📥</span>
+                                Export Responses CSV
+                            </a>
+                            <a href="{{ url_for('dashboard.export_task_matrix', study_id=study._id) }}" class="btn btn--secondary btn--lg export-btn" data-export-type="Task Matrix">
+                                <span class="btn-icon">📊</span>
+                                Export Task Matrix
+                            </a>
+                        </div>
+                        
+                        <!-- Export Progress Bar (hidden by default) -->
+                        <div id="export-progress" class="export-progress" style="display: none;">
+                            <div class="progress-bar">
+                                <div class="progress-fill"></div>
+                            </div>
+                            <div class="progress-text">
+                                <span class="progress-label">Exporting...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+  </div>
+  
+  <script>
+  function changeStudyStatus(studyId, newStatus) {
+      if (!confirm(`Are you sure you want to ${newStatus === 'active' ? 'activate' : newStatus === 'paused' ? 'pause' : 'complete'} this study?`)) {
+          return;
+      }
+      
+      fetch(`/dashboard/studies/${studyId}/status`, {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+          },
+          body: JSON.stringify({ status: newStatus })
+      })
+      .then(response => response.json())
+      .then(data => {
+          if (data.success) {
+              // Show success message
+              showNotification(`Study status changed to ${newStatus} successfully!`, 'success');
+              
+              // Reload page to reflect changes
+              setTimeout(() => {
+                  window.location.reload();
+              }, 1500);
+          } else {
+              showNotification(`Error: ${data.error}`, 'error');
+          }
+      })
+      .catch(error => {
+          console.error('Error:', error);
+          showNotification('Error changing study status', 'error');
+      });
+  }
+  
+  function showNotification(message, type) {
+      // Create notification element
+      const notification = document.createElement('div');
+      notification.className = `alert alert-${type === 'success' ? 'success' : 'danger'} notification`;
+      notification.textContent = message;
+      
+      // Add to page
+      document.body.appendChild(notification);
+      
+      // Remove after 3 seconds
+      setTimeout(() => {
+          notification.remove();
+      }, 3000);
+  }
+
+  // Export loading functionality
+  function showExportLoading(button, exportType) {
+      const originalText = button.innerHTML;
+      button.innerHTML = '<span class="btn-icon">⏳</span>Exporting...';
+      button.disabled = true;
+      button.classList.add('btn--loading');
+      
+      // Show simple progress indicator
+      const progressBar = document.getElementById('export-progress');
+      const progressLabel = progressBar.querySelector('.progress-label');
+      
+      progressLabel.textContent = `Exporting ${exportType}... Please wait, this may take a few minutes for large studies.`;
+      progressBar.style.display = 'block';
+      
+      // Show progress notification
+      showNotification(`${exportType} export started! This may take a few moments for large studies...`, 'info');
+      
+      // Store original state for potential restoration
+      button.dataset.originalText = originalText;
+  }
+
+  function hideExportLoading(button) {
+      if (button.dataset.originalText) {
+          button.innerHTML = button.dataset.originalText;
+          button.disabled = false;
+          button.classList.remove('btn--loading');
+      }
+      
+      // Hide progress bar
+      const progressBar = document.getElementById('export-progress');
+      progressBar.style.display = 'none';
+  }
+
+  // Add click handlers to export buttons
+  document.addEventListener('DOMContentLoaded', function() {
+      const exportButtons = document.querySelectorAll('.export-btn');
+      exportButtons.forEach(button => {
+          button.addEventListener('click', function(e) {
+              const exportType = this.dataset.exportType || 'Data';
+              showExportLoading(this, exportType);
+              
+              // Keep loading until page changes (download starts)
+              // The loader will be cleared when the page navigates or refreshes
+          });
+      });
+  });
+  
+  // Async loading of study statistics
+  {% if load_stats_async %}
+      document.addEventListener('DOMContentLoaded', function() {
+          const studyId = '{{ study._id }}';
+          const loadingElement = document.getElementById('stats-loading');
+          const responseStatsLoading = document.getElementById('response-stats-loading');
+          const responseStatsGrid = document.getElementById('response-stats-grid');
+          
+          // Show loading indicators
+          if (loadingElement) {
+              loadingElement.style.display = 'block';
+          }
+          if (responseStatsLoading) {
+              responseStatsLoading.style.display = 'block';
+          }
+          if (responseStatsGrid) {
+              responseStatsGrid.style.display = 'none';
+          }
+      
+      // Load statistics asynchronously
+      console.log('Loading statistics for study:', studyId);
+      fetch(`/dashboard/studies/${studyId}/stats`)
+          .then(response => {
+              console.log('Stats API response status:', response.status);
+              return response.json();
+          })
+          .then(data => {
+              console.log('Stats API data received:', data);
+              
+              // Update both Response Statistics section (top) and Responses overview section (bottom)
+              const updateElement = (selector, value, suffix = '') => {
+                  const element = document.querySelector(selector);
+                  if (element) {
+                      element.textContent = value + suffix;
+                      console.log(`Updated ${selector} to:`, value + suffix);
+                  } else {
+                      console.error(`Element ${selector} not found`);
+                  }
+              };
+              
+              // Update Response Statistics section (top) - analytics cards with IDs
+              updateElement('#top-total-responses', data.total_responses);
+              updateElement('#top-completed-responses', data.completed_responses);
+              updateElement('#top-abandoned-responses', data.abandoned_responses);
+              updateElement('#top-in-progress-responses', data.in_progress_responses);
+              updateElement('#top-completion-rate', data.completion_rate, '%');
+              updateElement('#top-avg-task-time', data.avg_task_time, 's');
+              
+              // Update Responses overview section (bottom) - stat items
+              updateElement('#total-responses', data.total_responses);
+              updateElement('#completed-responses', data.completed_responses);
+              updateElement('#abandoned-responses', data.abandoned_responses);
+              updateElement('#in-progress-responses', data.in_progress_responses);
+              updateElement('#completion-rate', data.completion_rate, '%');
+              updateElement('#avg-task-time', data.avg_task_time, 's');
+              
+              console.log('Statistics updated successfully');
+              
+              // Hide loading indicators and show statistics
+              if (loadingElement) {
+                  loadingElement.style.display = 'none';
+              }
+              if (responseStatsLoading) {
+                  responseStatsLoading.style.display = 'none';
+              }
+              if (responseStatsGrid) {
+                  responseStatsGrid.style.display = 'grid';
+              }
+          })
+          .catch(error => {
+              console.error('Error loading statistics:', error);
+              
+              // Hide loading indicators and show error
+              if (loadingElement) {
+                  loadingElement.innerHTML = '<span class="error-text">Failed to load statistics</span>';
+              }
+              if (responseStatsLoading) {
+                  responseStatsLoading.innerHTML = '<span class="error-text">Failed to load statistics</span>';
+              }
+              if (responseStatsGrid) {
+                  responseStatsGrid.style.display = 'grid'; // Show grid even with error
+              }
+          });
+  });
+  {% endif %}
+  </script>
+  {% endblock %}

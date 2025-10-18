@@ -1,0 +1,675 @@
+{% extends "base.html" %}
+
+{% block title %}{{ study.title }} - Responses{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/study_responses.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="study-responses-page">
+    <!-- Enhanced Header Section -->
+    <div class="responses-header-section">
+        <div class="header-content">
+            <div class="header-text">
+                <div class="breadcrumb">
+                    <a href="{{ url_for('dashboard.studies') }}" class="breadcrumb-link">Studies</a>
+                    <span class="breadcrumb-separator">/</span>
+                    <a href="{{ url_for('dashboard.study_detail', study_id=study._id) }}" class="breadcrumb-link">{{ study.title }}</a>
+                    <span class="breadcrumb-separator">/</span>
+                    <span class="breadcrumb-current">Responses</span>
+                </div>
+            <h1>Study Responses</h1>
+                <p class="header-subtitle">Analyze and export response data for "{{ study.title }}"</p>
+        </div>
+        <div class="header-actions">
+                <a href="{{ url_for('dashboard.study_detail', study_id=study._id) }}" class="btn btn--secondary btn--lg">
+                    <span class="btn-icon">←</span>
+                    Back to Study
+                </a>
+                <a href="{{ url_for('dashboard.export_study', study_id=study._id, type='csv') }}" class="btn btn--primary btn--lg">
+                    <span class="btn-icon">📊</span>
+                    Export CSV
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Stats Cards -->
+    <div class="stats-section">
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-content">
+                    <div class="stat-value">{{ total_responses }}</div>
+                    <div class="stat-label">Total Responses</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">✅</div>
+                <div class="stat-content">
+                    <div class="stat-value">{{ completed_responses }}</div>
+                    <div class="stat-label">Completed</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⏸️</div>
+                <div class="stat-content">
+                    <div class="stat-value">{{ abandoned_responses }}</div>
+                    <div class="stat-label">Abandoned</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🔄</div>
+                <div class="stat-content">
+                    <div class="stat-value">{{ in_progress_responses }}</div>
+                    <div class="stat-label">In Progress</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📈</div>
+                <div class="stat-content">
+                    <div class="stat-value">{{ "%.1f"|format(completion_rate) }}%</div>
+                    <div class="stat-label">Completion Rate</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⏱️</div>
+                <div class="stat-content">
+                    <div class="stat-value">{{ "%.1f"|format(avg_task_time) }}s</div>
+                    <div class="stat-label">Avg Task Time</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Information Card -->
+     
+    <!-- Filters and Search -->
+    <div class="content-section">
+        <div class="filters-section">
+            <div class="filters-header">
+                <h3>Filter & Search Responses</h3>
+                <div class="filter-controls">
+                    <div class="search-box">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="response-search" placeholder="Search by respondent ID, session ID..." class="search-input">
+                    </div>
+                    <select id="status-filter" class="filter-select">
+                        <option value="">All Statuses</option>
+                        <option value="completed">Completed Only</option>
+                        <option value="abandoned">Abandoned Only</option>
+                    </select>
+                    <select id="completion-filter" class="filter-select">
+                        <option value="">All Completion Levels</option>
+                        <option value="high">High (80%+)</option>
+                        <option value="medium">Medium (40-79%)</option>
+                        <option value="low">Low (0-39%)</option>
+                    </select>
+                    <button id="clear-filters" class="btn btn--secondary btn--sm">Clear Filters</button>
+                </div>
+                </div>
+            </div>
+        </div>
+
+    <!-- Responses Content -->
+        <div class="content-section">
+            {% if responses %}
+        <div class="responses-content">
+            <!-- Enhanced Responses Table -->
+            <div class="responses-table-container">
+                <div class="table-header">
+                    <h3>Response Details</h3>
+                    <div class="table-actions">
+                        <span class="results-count">Showing {{ responses|length }} of {{ total }} responses</span>
+                        <div class="view-toggle">
+                            <button class="view-btn active" data-view="table">📊 Table</button>
+                            <button class="view-btn" data-view="cards">🃏 Cards</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Table View -->
+                <div class="table-view active" id="table-view">
+            <div class="responses-table">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Respondent ID</th>
+                           
+                            <th>Start Time</th>
+                            <th>End Time</th>
+                            <th>Duration</th>
+                            <th>Status</th>
+                
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for response in responses %}
+                                <tr class="response-row" data-status="{% if response.is_completed %}completed{% elif response.is_abandoned %}abandoned{% else %}in_progress{% endif %}" data-completion="{{ response.completion_percentage }}">
+                                    <td>
+                                        <div class="respondent-info">
+                                            <span class="respondent-id">{{ response.respondent_id }}</span>
+                                            {% if response.personal_info %}
+                                            <span class="respondent-details">
+                                                {{ response.personal_info.get('age', 'N/A') }}y, {{ response.personal_info.get('gender', 'N/A') }}
+                                            </span>
+                                            {% endif %}
+                                        </div>
+                            </td>
+                           
+                            <td>
+                                        <div class="time-info">
+                                            <span class="date">{{ response.session_start_time.strftime('%Y-%m-%d') if response.session_start_time else 'N/A' }}</span>
+                                            <span class="time">{{ response.session_start_time.strftime('%H:%M:%S') if response.session_start_time else 'N/A' }}</span>
+                                        </div>
+                            </td>
+                            <td>
+                                        <div class="time-info">
+                                            <span class="date">{{ response.session_end_time.strftime('%Y-%m-%d') if response.session_end_time else 'N/A' }}</span>
+                                            <span class="time">{{ response.session_end_time.strftime('%H:%M:%S') if response.session_end_time else 'N/A' }}</span>
+                                        </div>
+                            </td>
+                            <td>
+                                        <div class="duration-info">
+                                            <span class="duration-value">{{ "%.1f"|format(response.total_study_duration) }}s</span>
+                                            <span class="duration-formatted">{{ "%.1f"|format(response.total_study_duration / 60) }}m</span>
+                                        </div>
+                            </td>
+                            <td>
+                                <span class="status-badge status-{% if response.is_completed %}completed{% elif response.is_abandoned %}abandoned{% else %}in_progress{% endif %}">
+                                            <span class="status-icon">{% if response.is_completed %}✅{% elif response.is_abandoned %}⏸️{% else %}🔄{% endif %}</span>
+                                    {% if response.is_completed %}Completed{% elif response.is_abandoned %}Abandoned{% else %}In Progress{% endif %}
+                                </span>
+                            </td>
+                        
+                            
+                            <td>
+                                <div class="action-buttons">
+                                      <button class="btn btn--sm btn--primary" onclick="viewResponseDetails('{{ response._id }}')" title="View full response details">
+                                          <span class="btn-icon">👁️</span>
+                                          Details
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                    </div>
+                </div>
+
+                <!-- Cards View -->
+                <div class="cards-view" id="cards-view">
+                    <div class="response-cards">
+                        {% for response in responses %}
+                        <div class="response-card" data-status="{% if response.is_completed %}completed{% elif response.is_abandoned %}abandoned{% else %}in_progress{% endif %}" data-completion="{{ response.completion_percentage }}">
+                            <div class="card-header">
+                                <div class="respondent-info">
+                                    <h4>Respondent {{ response.respondent_id }}</h4>
+                                    {% if response.personal_info %}
+                                    <span class="respondent-details">{{ response.personal_info.get('age', 'N/A') }}y, {{ response.personal_info.get('gender', 'N/A') }}</span>
+                                    {% endif %}
+                                </div>
+                                <span class="status-badge status-{% if response.is_completed %}completed{% elif response.is_abandoned %}abandoned{% else %}in_progress{% endif %}">
+                                    {% if response.is_completed %}✅{% elif response.is_abandoned %}⏸️{% else %}🔄{% endif %} {% if response.is_completed %}Completed{% elif response.is_abandoned %}Abandoned{% else %}In Progress{% endif %}
+                                </span>
+            </div>
+
+                            <div class="card-body">
+                                <div class="info-grid">
+                                    <div class="info-item">
+                                        <span class="label">Session:</span>
+                                        <span class="value">{{ response.session_id[:12] }}...</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <span class="label">Started:</span>
+                                        <span class="value">{{ response.session_start_time.strftime('%Y-%m-%d %H:%M') if response.session_start_time else 'N/A' }}</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <span class="label">Duration:</span>
+                                        <span class="value">{{ "%.1f"|format(response.total_study_duration / 60) }}m</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <span class="label">Tasks:</span>
+                                        <span class="value">{{ response.completed_tasks_count }}/{{ study.iped_parameters.tasks_per_consumer if study.iped_parameters and study.iped_parameters.tasks_per_consumer else 'N/A' }}</span>
+                                    </div>
+            </div>
+
+                                <div class="completion-section">
+                                    <div class="completion-header">
+                                        <span class="completion-label">Completion Progress</span>
+                                        <span class="completion-percentage">{{ "%.1f"|format(response.completion_percentage) }}%</span>
+                                    </div>
+                                    <div class="completion-bar">
+                                        <div class="completion-fill" style="width: {{ response.completion_percentage }}%"></div>
+                                    </div>
+                                </div>
+            </div>
+
+                                                          <div class="card-actions">
+                                  <button class="btn btn--sm btn--primary" onclick="viewResponseDetails('{{ response._id }}')">
+                                      <span class="btn-icon">👁️</span>
+                                      View Details
+                                  </button>
+                              </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Enhanced Pagination -->
+            {% if total > per_page %}
+            <div class="pagination-section">
+                <div class="pagination-info">
+                    <span>Showing {{ (page - 1) * per_page + 1 }} to {{ [page * per_page, total]|min }} of {{ total }} responses</span>
+                </div>
+                <nav class="pagination-nav" aria-label="Response pagination">
+                    <ul class="pagination">
+                        {% if page > 1 %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('dashboard.study_responses', study_id=study._id, page=page-1) }}">
+                                <span class="page-icon">←</span>
+                                Previous
+                            </a>
+                        </li>
+                        {% endif %}
+                        
+                        {% for p in range(1, (total / per_page)|round(0, 'ceil')|int + 1) %}
+                        <li class="page-item {{ 'active' if p == page else '' }}">
+                            <a class="page-link" href="{{ url_for('dashboard.study_responses', study_id=study._id, page=p) }}">{{ p }}</a>
+                        </li>
+                        {% endfor %}
+                        
+                        {% if page < (total / per_page)|round(0, 'ceil')|int %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('dashboard.study_responses', study_id=study._id, page=page+1) }}">
+                                Next
+                                <span class="page-icon">→</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
+            
+        </div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-icon">📊</div>
+                <h3>No Responses Yet</h3>
+                <p>This study hasn't received any responses yet. Share your study to start collecting data!</p>
+            <div class="empty-actions">
+                <a href="{{ url_for('dashboard.study_share', study_id=study._id) }}" class="btn btn--primary">Share Study</a>
+                <a href="{{ url_for('dashboard.study_detail', study_id=study._id) }}" class="btn btn--secondary">View Study Details</a>
+            </div>
+            </div>
+            {% endif %}
+        </div>
+
+    <!-- Enhanced Response Details Modal -->
+        <div class="modal" id="responseDetailsModal">
+        <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                    <h5 class="modal-title">Response Overview</h5>
+                    <button type="button" class="modal-close" onclick="closeResponseModal()">&times;</button>
+                    </div>
+                    <div class="modal-body" id="responseDetailsContent">
+                    <div class="loading-state">
+                        <div class="loading-spinner"></div>
+                        <p>Loading response details...</p>
+                    </div>
+                </div>
+                                 <div class="modal-footer">
+                     <button type="button" class="btn btn--secondary" onclick="closeResponseModal()">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentResponseId = null;
+
+// Initialize study data for template access
+window.studyData = {
+    default_background: {{ study.default_background | tojson if study.default_background else 'null' }}
+};
+
+// View toggle functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const viewBtns = document.querySelectorAll('.view-btn');
+    const tableView = document.getElementById('table-view');
+    const cardsView = document.getElementById('cards-view');
+    
+    viewBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const view = this.dataset.view;
+            
+            // Update active button
+            viewBtns.forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            
+            // Show/hide views
+            if (view === 'table') {
+                tableView.classList.add('active');
+                cardsView.classList.remove('active');
+            } else {
+                tableView.classList.remove('active');
+                cardsView.classList.add('active');
+            }
+        });
+    });
+    
+    // Search and filter functionality
+    const searchInput = document.getElementById('response-search');
+    const statusFilter = document.getElementById('status-filter');
+    const completionFilter = document.getElementById('completion-filter');
+    const clearFiltersBtn = document.getElementById('clear-filters');
+    
+    function filterResponses() {
+        const searchTerm = searchInput.value.toLowerCase();
+        const statusValue = statusFilter.value;
+        const completionValue = completionFilter.value;
+        
+        const rows = document.querySelectorAll('.response-row');
+        const cards = document.querySelectorAll('.response-card');
+        
+        [rows, cards].forEach(elements => {
+            elements.forEach(element => {
+                let show = true;
+                
+                // Search filter
+                if (searchTerm) {
+                    const text = element.textContent.toLowerCase();
+                    if (!text.includes(searchTerm)) {
+                        show = false;
+                    }
+                }
+                
+                // Status filter
+                if (statusValue && element.dataset.status !== statusValue) {
+                    show = false;
+                }
+                
+                // Completion filter
+                if (completionValue) {
+                    const completion = parseFloat(element.dataset.completion);
+                    if (completionValue === 'high' && completion < 80) show = false;
+                    if (completionValue === 'medium' && (completion < 40 || completion >= 80)) show = false;
+                    if (completionValue === 'low' && completion >= 40) show = false;
+                }
+                
+                element.style.display = show ? '' : 'none';
+            });
+        });
+    }
+    
+    searchInput.addEventListener('input', filterResponses);
+    statusFilter.addEventListener('change', filterResponses);
+    completionFilter.addEventListener('change', filterResponses);
+    
+    clearFiltersBtn.addEventListener('click', function() {
+        searchInput.value = '';
+        statusFilter.value = '';
+        completionFilter.value = '';
+        filterResponses();
+    });
+});
+
+function viewResponseDetails(responseId) {
+    currentResponseId = responseId;
+    const modal = document.getElementById('responseDetailsModal');
+    const content = document.getElementById('responseDetailsContent');
+    
+    // Show loading state
+    content.innerHTML = `
+        <div class="loading-state">
+            <div class="loading-spinner"></div>
+            <p>Loading response details...</p>
+        </div>
+    `;
+    
+    modal.style.display = 'block';
+    
+    // Fetch response details from API
+    fetch(`/dashboard/responses/${responseId}/details`)
+        .then(response => response.json())
+        .then(data => {
+            console.log('📊 Received response data:', data);
+            if (data.error) {
+                content.innerHTML = `
+                    <div class="error-state">
+                        <p class="error-message">Error: ${data.error}</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Format duration for display
+            function formatDuration(seconds) {
+                if (!seconds) return 'N/A';
+                const mins = Math.floor(seconds / 60);
+                const secs = seconds % 60;
+                return `${mins}m ${secs}s`;
+            }
+            
+            // Format datetime for display
+            function formatDateTime(isoString) {
+                if (!isoString) return 'N/A';
+                const date = new Date(isoString);
+                return date.toLocaleString();
+            }
+            
+            // Build tasks HTML
+            let tasksHtml = '';
+            if (data.tasks && data.tasks.length > 0) {
+                data.tasks.forEach((task, index) => {
+                    tasksHtml += `
+                        <div class="task-item">
+                            <div class="task-header">
+                                <h5>Task ${task.task_index}</h5>
+                                <span class="task-duration">${formatDuration(task.duration_seconds)}</span>
+                                <div class="task-info-grid">
+                                    <div class="info-item">
+                                        <span class="label">Start Time:</span>
+                                        <span class="value">${formatDateTime(task.start_time)}</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <span class="label">Completion Time:</span>
+                                        <span class="value">${formatDateTime(task.completion_time)}</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <span class="label">Duration:</span>
+                                        <span class="value">${formatDuration(task.duration_seconds)}</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <span class="label">Rating Given:</span>
+                                        <span class="value">${task.rating_given || 'N/A'}</span>
+                                    </div>
+                                </div> 
+                            </div>
+                            <div class="task-details">
+                               
+                                
+                                ${task.vignettes && task.vignettes.length > 0 ? `
+                                    <div class="vignettes-section">
+                                     
+                                        ${task.vignettes[0].type === 'layer' ? `
+                                            <!-- Layer Study: Stacked vignette with z-index -->
+                                            <div class="vignette-preview layer-vignette">
+                                                ${window.studyData && window.studyData.default_background && window.studyData.default_background.url ? `
+                                                    <!-- Default background as layer with z-index 0 -->
+                                                    <div class="layer-image background-layer" 
+                                                         style="z-index: 0; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.9;">
+                                                        <img src="${window.studyData.default_background.url}" 
+                                                             alt="Default Background" 
+                                                             class="vignette-layer-img background-layer-img"
+                                                             data-layer="Background"
+                                                             data-z-index="0"
+                                                             title="Default Background (z-index: 0)"
+                                                             onerror="this.style.display='none';">
+                                                    </div>
+                                                ` : ''}
+                                                ${task.vignettes.sort((a, b) => (a.z_index || 0) - (b.z_index || 0)).map((vignette, index) => `
+                                                    <div class="layer-image" 
+                                                         style="z-index: ${vignette.z_index || index}; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+                                                        <img src="${vignette.content}" 
+                                                             alt="${vignette.alt_text || 'Layer image'}" 
+                                                             class="vignette-layer-img"
+                                                             data-layer="${vignette.layer_name || 'Unknown'}"
+                                                             data-z-index="${vignette.z_index || index}"
+                                                             title="${vignette.layer_name || 'Unknown'} (z-index: ${vignette.z_index || index})"
+                                                             onerror="this.style.display='none';">
+                                                    </div>
+                                                `).join('')}
+                                            </div>
+                                        ` : task.vignettes[0].type === 'grid' ? `
+                                            <!-- Grid Study: Same layout as task display -->
+                                            <div class="grid-elements-container elements-${task.vignettes.length}">
+                                                ${task.vignettes.map(vignette => `
+                                                    <div class="grid-element-item">
+                                                        <img src="${vignette.content}" 
+                                                             alt="${vignette.alt_text || vignette.element_name || 'Element'}" 
+                                                             class="task-image grid-image">
+                                                    </div>
+                                                `).join('')}
+                                            </div>
+                                        ` : `
+                                            <!-- Unknown type -->
+                                            <div class="unknown-vignette-type">
+                                                <p>Unknown vignette type: ${task.vignettes[0].type}</p>
+                                                <pre>${JSON.stringify(task.vignettes, null, 2)}</pre>
+                                            </div>
+                                        `}
+                                    </div>
+                                ` : `
+                                    <div class="no-vignettes">
+                                        <p>No vignettes data available for this task</p>
+                                    </div>
+                                `}
+                                
+                                
+                            </div>
+                        </div>
+                    `;
+                });
+            } else {
+                tasksHtml = '<p class="no-tasks">No tasks completed for this response.</p>';
+            }
+            
+            // Build response overview HTML
+            const responseHtml = `
+                <div class="response-details">
+                    <div class="detail-section">
+                        <h4>Response Overview</h4>
+                        <div class="overview-grid">
+                            <div class="overview-item">
+                                <span class="label">Response ID:</span>
+                                <span class="value">${data.response_id}</span>
+                            </div>
+                            <div class="overview-item">
+                                <span class="label">Respondent ID:</span>
+                                <span class="value">${data.respondent_id}</span>
+                            </div>
+                            <div class="overview-item">
+                                <span class="label">Session ID:</span>
+                                <span class="value">${data.session_id}</span>
+                            </div>
+                            <div class="overview-item">
+                                <span class="label">Status:</span>
+                                <span class="value status-${data.is_completed ? 'completed' : data.is_abandoned ? 'abandoned' : 'in_progress'}">${data.status}</span>
+                            </div>
+                            <div class="overview-item">
+                                <span class="label">Completion:</span>
+                                <span class="value">${data.completion_percentage}%</span>
+                            </div>
+                            <div class="overview-item">
+                                <span class="label">Total Duration:</span>
+                                <span class="value">${formatDuration(data.total_study_duration)}</span>
+                            </div>
+                            <div class="overview-item">
+                                <span class="label">Start Time:</span>
+                                <span class="value">${formatDateTime(data.session_start_time)}</span>
+                            </div>
+                            <div class="overview-item">
+                                <span class="label">End Time:</span>
+                                <span class="value">${formatDateTime(data.session_end_time)}</span>
+                            </div>
+                        </div>
+                        ${data.abandonment_reason ? `
+                            <div class="abandonment-reason">
+                                <span class="label">Abandonment Reason:</span>
+                                <span class="value">${data.abandonment_reason}</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                    
+                    <div class="detail-section">
+                        <h4>Task Details (${data.tasks ? data.tasks.length : 0} tasks)</h4>
+                        ${tasksHtml}
+                    </div>
+                    
+                    ${Object.keys(data.classification_answers).length > 0 ? `
+                        <div class="detail-section">
+                            <h4>Classification Answers</h4>
+                            <div class="classification-grid">
+                                ${Object.entries(data.classification_answers).map(([key, value]) => `
+                                    <div class="classification-item">
+                                        <span class="label">${key}:</span>
+                                        <span class="value">${value}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    ${Object.keys(data.personal_info).length > 0 ? `
+                        <div class="detail-section">
+                            <h4>Personal Information</h4>
+                            <div class="personal-info-grid">
+                                ${Object.entries(data.personal_info).map(([key, value]) => `
+                                    <div class="personal-info-item">
+                                        <span class="label">${key}:</span>
+                                        <span class="value">${value}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+            
+            content.innerHTML = responseHtml;
+        })
+        .catch(error => {
+            console.error('Error fetching response details:', error);
+            content.innerHTML = `
+                <div class="error-state">
+                    <p class="error-message">Error loading response details. Please try again.</p>
+                </div>
+            `;
+        });
+}
+
+
+
+function closeResponseModal() {
+    document.getElementById('responseDetailsModal').style.display = 'none';
+    currentResponseId = null;
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('responseDetailsModal');
+    if (event.target == modal) {
+        modal.style.display = 'none';
+        currentResponseId = null;
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,718 @@
+{% extends "base.html" %}
+
+{% block title %}Create Study - Step 3a{% endblock %}
+
+{% block content %}
+<div class="study-creation-container">
+    <!-- Progress Bar -->
+    {% set study_type = 'layer' %}
+    {{ study_progress_bar('3a', study_type, draft) }}
+
+    <div class="step-content">
+        <div class="step-header">
+            <h1 class="step-title">Step 3a: Generate RDE Task Matrix</h1>
+            <p class="step-description">
+                Generate the RDE task matrix for your layer study using the new algorithm
+            </p>
+        </div>
+
+        {% if tasks_matrix %}
+            <!-- Task Matrix Summary -->
+            <div class="study-form-group">
+                <h3 class="section-title">Task Matrix Generated Successfully!</h3>
+                <div class="matrix-summary">
+                    <div class="summary-grid">
+                        <div class="summary-item">
+                            <span class="summary-label">Total Tasks:</span>
+                            <span class="summary-value">{{ matrix_summary.total_tasks }}</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">Total Respondents:</span>
+                            <span class="summary-value">{{ matrix_summary.total_respondents }}</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">Tasks per Respondent:</span>
+                            <span class="summary-value">{{ matrix_summary.tasks_per_respondent }}</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">Elements per Task:</span>
+                            <span class="summary-value">{{ matrix_summary.elements_per_task }}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="algorithm-info">
+                        <h4>Layer Study Algorithm Details</h4>
+                        <ul>
+                            <li><strong>Structure:</strong> {{ matrix_summary.elements_per_task }} - one element from each category per task</li>
+                            <li><strong>Exposure Balancing:</strong> Within-category balance with configurable tolerance</li>
+                            <li><strong>Uniqueness:</strong> Ensures per-respondent uniqueness of vignette tuples</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <!-- Vignette Preview Section -->
+                <div class="matrix-preview">
+                                         <h4>Vignette Preview</h4>
+                     <p class="form-help">Below is a preview of the first 20 tasks for the first respondent. This shows how the layered images will appear based on z-index.</p>
+                    
+                                         <div class="respondents-preview">
+                         {% if tasks_matrix %}
+                             {% set first_respondent_id = tasks_matrix.keys()|list|first %}
+                             {% set first_respondent_tasks = tasks_matrix[first_respondent_id] %}
+                             <div class="respondent-tasks">
+                                 <h5>Respondent 1</h5>
+                                 <p class="text-muted">Vignette tasks for this respondent:</p>
+                                 
+                                 <div class="vignette-grid-scrollable">
+                                     {% if first_respondent_tasks and first_respondent_tasks|length > 0 %}
+                                     {% for task in first_respondent_tasks %}
+                                     <div class="vignette-card">
+                                         <div class="vignette-header">
+                                             <span class="vignette-task-number">Task {{ loop.index }}</span>
+                                             <div class="layer-indicators">
+                                                 {% if task.elements_shown_content %}
+                                                     {% for element_name, content in task.elements_shown_content.items() %}
+                                                         {% if content and content.url %}
+                                                             <span class="layer-badge active">
+                                                                 {{ content.layer_name or element_name.split('_')[0] }}
+                                                             </span>
+                                                          {% endif %}
+                                                     {% endfor %}
+                                                 {% endif %}
+                                             </div>
+                                         </div>
+                                         
+                                         <div class="vignette-preview">
+                                             {% if task.elements_shown_content %}
+                                                 {% set has_content = false %}
+                                                 
+                                                 <!-- Add default background as layer with z-index 0 if it exists -->
+                                                 <!-- DEBUG: layer_config_data = {{ layer_config_data | tojson }} -->
+                                                 <!-- DEBUG: default_background = {{ layer_config_data.default_background if layer_config_data else 'None' }} -->
+                                                 {% if layer_config_data and layer_config_data.default_background and layer_config_data.default_background.url %}
+                                                     <div class="layer-image" style="z-index: 0;">
+                                                         <img src="{{ layer_config_data.default_background.url }}" 
+                                                              alt="Default Background" 
+                                                              title="Default Background (z-index: 0)"
+                                                              class="vignette-layer-img">
+                                                     </div>
+                                            
+                                                 {% endif %}
+                                                 
+                                                 {% for element_name, content in task.elements_shown_content.items() %}
+                                                     {% if content and content.url %}
+                                                         {% set has_content = true %}
+                                                         <div class="layer-image" style="z-index: {{ content.z_index or 0 }};">
+                                                             <img src="{{ content.url }}" 
+                                                                  alt="{{ content.name or element_name }}" 
+                                                                  title="{{ content.layer_name or element_name }}: {{ content.name or element_name }}"
+                                                                  class="vignette-layer-img">
+                                                         </div>
+                                                      {% endif %}
+                                                 {% endfor %}
+                                                 
+                                                 {% if not has_content %}
+                                                 
+                                                 {% endif %}
+                                             {% else %}
+                                                 <div class="no-content-placeholder">
+                                                     <i class="fas fa-exclamation-triangle fa-3x text-muted"></i>
+                                                     <p class="text-muted mt-2">No vignette data</p>
+                                                 </div>
+                                             {% endif %}
+                                         </div>
+                                         
+                                         <div class="vignette-footer">
+                                             <small class="text-muted">
+                                                 {% if task.elements_shown_content %}
+                                                     {% set active_layers = 0 %}
+                                                     {% for element_name, content in task.elements_shown_content.items() %}
+                                                         {% if content and content.url %}
+                                                             {% set active_layers = active_layers + 1 %}
+                                                         {% endif %}
+                                                     {% endfor %}
+                                                     {{ active_layers }} layer{{ 's' if active_layers != 1 else '' }} active
+                                                 {% else %}
+                                                     0 layers active
+                                                 {% endif %}
+                                             </small>
+                                         </div>
+                                     </div>
+                                     {% endfor %}
+                                     {% endif %}
+                                 </div>
+                                 
+                                 {% if tasks_matrix|length > 1 %}
+                                 <div class="more-respondents">
+                                     <p class="text-muted">... and {{ tasks_matrix|length - 1 }} more respondents with similar vignette structures</p>
+                                 </div>
+                                 {% endif %}
+                             </div>
+                         {% else %}
+                             <p class="text-muted">No vignette matrix generated yet.</p>
+                         {% endif %}
+                     </div>
+                </div>
+                
+                <!-- Matrix Actions -->
+                <div class="matrix-actions">
+                    <h4>Matrix Actions</h4>
+                    <div class="action-buttons">
+                        <button type="button" class="btn btn--outline" onclick="downloadMatrix()">
+                            📥 Download Matrix (CSV)
+                        </button>
+                        <button type="button" class="btn btn--outline" onclick="showMatrixStats()">
+                            📊 View Matrix Statistics
+                        </button>
+                        <form method="POST" style="display: inline;">
+                            {{ form.hidden_tag() }}
+                            {{ form.regenerate_matrix(class="form-check-input", style="display: none;") }}
+                            <button type="submit" class="btn btn--outline">
+                                🔄 Regenerate Matrix
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="step-actions">
+                    <a href="{{ url_for('study_creation.layer_iped') }}" class="btn btn--secondary step-nav-btn">← Previous</a>
+                    <a href="{{ url_for('study_creation.step3b') }}" class="btn btn--primary step-nav-btn">Continue to Preview →</a>
+                </div>
+            </div>
+        {% else %}
+            <!-- Generate Matrix Form -->
+            <div class="study-form-group">
+                <h3 class="section-title">Generate RDE Task Matrix</h3>
+                <p class="form-help">
+                    Click the button below to generate the RDE task matrix for your layer study. 
+                    The algorithm will automatically calculate optimal tasks per consumer and ensure balanced exposure.
+                </p>
+                
+                <form method="POST" class="step-form" data-validate="true" data-loading="true">
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="study-form-group">
+                        {{ form.regenerate_matrix.label(class="study-form-label") }}
+                        {{ form.regenerate_matrix(class="form-check-input") }}
+                        <small class="form-help">Check this if you want to regenerate with a different random seed</small>
+                    </div>
+                    
+                    <div class="step-actions">
+                        <a href="{{ url_for('study_creation.layer_iped') }}" class="btn btn--secondary step-nav-btn">← Previous</a>
+                        {{ form.submit(class="btn btn--primary step-nav-btn") }}
+                    </div>
+                </form>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Matrix Statistics Modal -->
+<div class="modal-overlay" id="matrixStatsModal">
+    <div class="modal-container modal-large">
+        <div class="modal-header">
+            <h3 class="modal-title">Matrix Statistics</h3>
+            <button type="button" class="modal-close" onclick="closeMatrixStats()">
+                <span>&times;</span>
+            </button>
+        </div>
+        <div class="modal-body modal-scrollable">
+            <div id="matrixStatsContent">
+                <!-- Statistics will be loaded here -->
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn--secondary" onclick="closeMatrixStats()">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Error Display Modal -->
+<div class="modal-overlay" id="errorModal">
+    <div class="modal-container">
+        <div class="modal-header error-header">
+            <h3 class="modal-title">⚠️ Error</h3>
+            <button type="button" class="modal-close" onclick="closeErrorModal()">
+                <span>&times;</span>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div id="errorContent">
+                <!-- Error content will be loaded here -->
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn--secondary" onclick="closeErrorModal()">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Image Preview Modal -->
+<div class="modal-overlay" id="imagePreviewModal" style="display: none;">
+    <div class="modal-container">
+        <div class="modal-header">
+            <h3 class="modal-title">Image Preview</h3>
+            <button type="button" class="modal-close" onclick="closeImagePreview()">
+                <span>&times;</span>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div id="imagePreviewContent">
+                <!-- Image will be loaded here -->
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn--secondary" onclick="closeImagePreview()">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Timer functionality
+let timerInterval = null;
+let timeRemaining =600; // 10 minutes in seconds
+
+function startTimer() {
+    timeRemaining = 600; // Reset to 10 minutes
+    const timerDisplay = document.getElementById('timerDisplay');
+    const timerContainer = document.getElementById('timerContainer');
+    
+    if (timerContainer) {
+        timerContainer.style.display = 'block';
+    }
+    
+    if (timerInterval) {
+        clearInterval(timerInterval);
+    }
+    
+    timerInterval = setInterval(() => {
+        timeRemaining--;
+        
+        const minutes = Math.floor(timeRemaining / 60);
+        const seconds = timeRemaining % 60;
+        const timeString = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        
+        if (timerDisplay) {
+            timerDisplay.textContent = timeString;
+            
+            // Change color based on remaining time
+            timerDisplay.classList.remove('warning', 'critical');
+            if (timeRemaining <= 30) {
+                timerDisplay.classList.add('critical');
+            } else if (timeRemaining <= 60) {
+                timerDisplay.classList.add('warning');
+            }
+        }
+        
+        if (timeRemaining <= 0) {
+            clearInterval(timerInterval);
+            if (timerDisplay) {
+                timerDisplay.textContent = '0:00';
+            }
+        }
+    }, 1000);
+}
+
+function stopTimer() {
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
+    
+    const timerContainer = document.getElementById('timerContainer');
+    if (timerContainer) {
+        timerContainer.style.display = 'none';
+    }
+}
+
+// Form submission handling
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('.step-form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            if (loadingOverlay) {
+                loadingOverlay.classList.add('is-visible');
+                loadingOverlay.style.display = 'flex';
+                
+                // Start the 3-minute timer
+                startTimer();
+            }
+            
+            // Show loading state
+            const submitBtn = form.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="loading-spinner loading-spinner--sm"></span> Generating Tasks...';
+            }
+        });
+    }
+    
+    // Handle regenerate matrix button
+    const regenerateForms = document.querySelectorAll('form');
+    regenerateForms.forEach(form => {
+        const regenerateBtn = form.querySelector('button[type="submit"]');
+        if (regenerateBtn && regenerateBtn.textContent.includes('Regenerate Matrix')) {
+            form.addEventListener('submit', function() {
+                const loadingOverlay = document.getElementById('loadingOverlay');
+                if (loadingOverlay) {
+                    loadingOverlay.classList.add('is-visible');
+                    loadingOverlay.style.display = 'flex';
+                    
+                    // Start the 3-minute timer
+                    startTimer();
+                    
+                    // Update loading text for regenerate
+                    const loadingText = loadingOverlay.querySelector('.loading-overlay-text');
+                    if (loadingText) {
+                        loadingText.textContent = 'Regenerating task matrix...';
+                    }
+                    
+                    // Disable regenerate button
+                    regenerateBtn.disabled = true;
+                    regenerateBtn.innerHTML = '<span class="loading-spinner loading-spinner--sm"></span> Regenerating...';
+                }
+            });
+        }
+    });
+    
+    // Check for flash messages and display them
+    checkFlashMessages();
+});
+
+// Check for flash messages
+function checkFlashMessages() {
+    // Look for Flask flash messages in the DOM
+    const flashMessages = document.querySelectorAll('.flash-message, .alert, [class*="flash"], [class*="alert"]');
+    
+    flashMessages.forEach(message => {
+        const messageText = message.textContent || message.innerText;
+        const isError = message.className.includes('error') || message.className.includes('danger');
+        
+        if (isError) {
+            showErrorModal(messageText);
+        }
+    });
+}
+
+// Show error modal
+function showErrorModal(errorMessage) {
+    const modal = document.getElementById('errorModal');
+    const content = document.getElementById('errorContent');
+    
+    if (modal && content) {
+        content.innerHTML = `
+            <div class="error-message">
+                <p>${errorMessage}</p>
+            </div>
+        `;
+        modal.classList.add('modal-active');
+    }
+}
+
+// Close error modal
+function closeErrorModal() {
+    const modal = document.getElementById('errorModal');
+    if (modal) {
+        modal.classList.remove('modal-active');
+    }
+}
+
+// Image preview functionality
+function showImagePreview(imageUrl, elementName) {
+    const modal = document.getElementById('imagePreviewModal');
+    const content = document.getElementById('imagePreviewContent');
+    
+    // Set the image
+    content.innerHTML = `
+        <div class="image-preview-container">
+            <img src="${imageUrl}" alt="${elementName}" class="image-preview-large">
+            <p class="image-preview-caption">${elementName}</p>
+        </div>
+    `;
+    
+    // Show the modal
+    modal.style.display = 'flex';
+}
+
+function closeImagePreview() {
+    const modal = document.getElementById('imagePreviewModal');
+    modal.style.display = 'none';
+}
+
+// Close modal when clicking outside
+document.getElementById('imagePreviewModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeImagePreview();
+    }
+});
+
+function downloadMatrix() {
+    // Create CSV content
+    const matrix = {{ tasks_matrix|tojson|safe }};
+    let csvContent = "Respondent ID,Task Number,Active Elements\n";
+    
+    Object.entries(matrix).forEach(([respondentId, tasks]) => {
+        tasks.forEach((task, taskIndex) => {
+            const activeElements = Object.entries(task.elements_shown)
+                .filter(([element, isActive]) => isActive)
+                .map(([element]) => element);
+            const elements = activeElements.join(';');
+            csvContent += `${respondentId},${taskIndex + 1},"${elements}"\n`;
+        });
+    });
+    
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'iped_task_matrix.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
+function showMatrixStats() {
+    const matrix = {{ tasks_matrix|tojson|safe }};
+    const modal = document.getElementById('matrixStatsModal');
+    const content = document.getElementById('matrixStatsContent');
+    
+    // Calculate statistics from the actual matrix structure
+    const totalRespondents = Object.keys(matrix).length;
+    let totalTasks = 0;
+    const elementFrequency = {};
+    const activeElementsCounts = {};
+    let totalElementSelections = 0;
+    
+    Object.values(matrix).forEach(tasks => {
+        totalTasks += tasks.length;
+        tasks.forEach(task => {
+            // Count active elements (excluding _content entries)
+            let activeCount = 0;
+            Object.entries(task.elements_shown).forEach(([element, isActive]) => {
+                // Only count actual elements, not content entries
+                if (isActive && !element.endsWith('_content')) {
+                    activeCount++;
+                    elementFrequency[element] = (elementFrequency[element] || 0) + 1;
+                    totalElementSelections++;
+                }
+            });
+            activeElementsCounts[activeCount] = (activeElementsCounts[activeCount] || 0) + 1;
+        });
+    });
+    
+    const tasksPerRespondent = totalRespondents > 0 ? Math.round(totalTasks / totalRespondents) : 0;
+    
+    // Get layer_iped data for additional context
+    const layerIpedData = {{ layer_iped_data|tojson|safe }};
+    const minElements = layerIpedData.min_active_elements || 0;
+    const maxElements = layerIpedData.max_active_elements || 0;
+    
+    // Generate statistics HTML
+    let statsHTML = `
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h6>Overall Statistics</h6>
+                <div class="stat-item">
+                    <span class="stat-label">Total Tasks:</span>
+                    <span class="stat-value">${totalTasks.toLocaleString()}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Total Respondents:</span>
+                    <span class="stat-value">${totalRespondents.toLocaleString()}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Tasks per Respondent:</span>
+                    <span class="stat-value">${tasksPerRespondent}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Elements per Task Range:</span>
+                    <span class="stat-value">${minElements}-${maxElements}</span>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <h6>Element Frequency</h6>
+                <div class="element-freq-list">
+                    ${Object.entries(elementFrequency)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([element, count]) => {
+                            // Clean up element names (remove underscores if present)
+                            const cleanElementName = element.replace(/_/g, '');
+                            return `
+                                <div class="freq-item">
+                                    <span class="element-name">${cleanElementName}</span>
+                                    <span class="freq-count">${count.toLocaleString()} times</span>
+                                </div>
+                            `;
+                        }).join('')}
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <h6>Active Elements Distribution</h6>
+                <div class="active-elements-dist">
+                    ${Object.entries(activeElementsCounts)
+                        .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
+                        .map(([count, frequency]) => `
+                            <div class="dist-item">
+                                <span class="dist-label">${count} elements:</span>
+                                <span class="dist-count">${frequency.toLocaleString()} tasks</span>
+                            </div>
+                        `).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    content.innerHTML = statsHTML;
+    
+    // Show modal
+    modal.classList.add('modal-active');
+}
+
+function closeMatrixStats() {
+    const modal = document.getElementById('matrixStatsModal');
+    modal.classList.remove('modal-active');
+}
+
+// Close modal when clicking outside
+document.addEventListener('click', function(event) {
+    const modal = document.getElementById('matrixStatsModal');
+    const errorModal = document.getElementById('errorModal');
+    
+    if (event.target === modal) {
+        modal.classList.remove('modal-active');
+    }
+    
+    if (event.target === errorModal) {
+        errorModal.classList.remove('modal-active');
+    }
+});
+
+// Close modal with Escape key
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        const modal = document.getElementById('matrixStatsModal');
+        const errorModal = document.getElementById('errorModal');
+        
+        if (modal) modal.classList.remove('modal-active');
+        if (errorModal) errorModal.classList.remove('modal-active');
+    }
+});
+</script>
+
+<style>
+/* Background Layer Styling for Step3a - REMOVED BORDERS AND LABELS */
+/* .background-layer-img {
+    border: 2px solid #2196f3;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(33, 150, 243, 0.3);
+}
+
+.background-layer {
+    position: relative;
+}
+
+.background-layer::after {
+    content: "Background";
+    position: absolute;
+    bottom: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #2196f3;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 500;
+} */
+</style>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-overlay-content">
+        <div class="loading-spinner"></div>
+        <p class="loading-overlay-text" id="loadingText">Generating task matrix...</p>
+        <div class="timer-container" id="timerContainer" style="display: none;">
+            <div class="timer-text">Estimated time remaining:</div>
+            <div class="timer-display" id="timerDisplay">10:00</div>
+        </div>
+    </div>
+</div>
+
+<!-- Timer Styling -->
+<style>
+/* Timer Styling */
+.timer-container {
+    margin-top: 20px;
+    text-align: center;
+}
+
+.timer-text {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.timer-display {
+    font-size: 24px;
+    font-weight: bold;
+    color: #2196F3;
+    font-family: 'Courier New', monospace;
+    background: rgba(33, 150, 243, 0.1);
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 2px solid rgba(33, 150, 243, 0.2);
+    display: inline-block;
+    min-width: 80px;
+    animation: timerPulse 2s ease-in-out infinite;
+}
+
+@keyframes timerPulse {
+    0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(33, 150, 243, 0.3);
+    }
+    50% {
+        transform: scale(1.05);
+        box-shadow: 0 0 0 8px rgba(33, 150, 243, 0);
+    }
+}
+
+.timer-display.warning {
+    color: #FF9800;
+    background: rgba(255, 152, 0, 0.1);
+    border-color: rgba(255, 152, 0, 0.2);
+}
+
+.timer-display.critical {
+    color: #F44336;
+    background: rgba(244, 67, 54, 0.1);
+    border-color: rgba(244, 67, 54, 0.2);
+    animation: timerCritical 1s ease-in-out infinite;
+}
+
+@keyframes timerCritical {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+    .timer-display {
+        font-size: 20px;
+        padding: 6px 12px;
+    }
+    
+    .timer-text {
+        font-size: 13px;
+    }
+}
+</style>
+{% endblock %}

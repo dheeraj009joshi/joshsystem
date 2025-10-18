@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block title %}{{ study.title }} - Welcome{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/study_participation.css') }}">
+<style>
+.preload-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 10px 20px;
+    text-align: center;
+    z-index: 1000;
+    transform: translateY(-100%);
+    transition: transform 0.3s ease;
+}
+
+.preload-progress.show {
+    transform: translateY(0);
+}
+
+.preload-progress-bar {
+    width: 100%;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
+    margin: 8px 0;
+    overflow: hidden;
+}
+
+.preload-progress-fill {
+    height: 100%;
+    background: white;
+    border-radius: 2px;
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+.preload-text {
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.preload-details {
+    font-size: 12px;
+    opacity: 0.8;
+    margin-top: 4px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Image Preloading Progress Bar -->
+<div id="preloadProgress" class="preload-progress">
+    <div class="preload-text">Preparing your study...</div>
+    <div class="preload-progress-bar">
+        <div class="preload-progress-fill" id="preloadProgressFill"></div>
+    </div>
+    <div class="preload-details" id="preloadDetails">Loading images...</div>
+</div>
+
+<div class="study-participation-container">
+    <div class="welcome-section">
+        <div class="welcome-header">
+            <h1 class="study-title">{{ study.title }}</h1>
+            <p class="study-description">{{ study.description or 'Thank you for participating in this research study.' }}</p>
+        </div>
+        <div class="start-study-section">
+            <form method="POST" action="{{ url_for('study_participation.personal_info', study_id=study._id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="start-study-btn">
+                    <span class="btn-text">Start Study</span>
+                    <span class="btn-icon">→</span>
+                </button>
+            </form>
+        </div>
+        <div class="study-info">
+            <div class="info-item">
+                <span class="info-label">Estimated Time:</span>
+                <span class="info-value">3-5 minutes</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Study Type:</span>
+                <span class="info-value">{{ study.study_type|title }} Study</span>
+            </div>
+            {% if study.iped_parameters %}
+            <div class="info-item">
+                <span class="info-label">Total Vignettes:</span>
+                <span class="info-value">{{ study.iped_parameters.tasks_per_consumer  }}</span>
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="welcome-message">
+            <h2>Welcome to the Study!</h2>
+            <p>You're about to participate in an important research study. This study will help researchers understand how people evaluate different visual elements.</p>
+            
+            <div class="study-instructions">
+                <h3>What to Expect:</h3>
+                <ul>
+                    <li><strong>Personal Information:</strong> Brief demographic questions</li>
+                    <li><strong>Classification Questions:</strong> A few questions about your preferences</li>
+                    <li><strong>Rating Tasks:</strong> Rate different combinations of visual elements</li>
+                </ul>
+            </div>
+            
+            <div class="important-notes">
+                <h3>Important Notes:</h3>
+                <ul>
+                    <li>Your responses are completely anonymous</li>
+                    <li>There are no right or wrong answers</li>
+                    <li>Please complete the study in one session</li>
+                    <li>You can withdraw at any time</li>
+                </ul>
+            </div>
+        </div>
+        
+        
+        
+        <div class="study-footer">
+            <p class="footer-text">This study has been approved by our research ethics board. Your participation is voluntary and appreciated.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/image-preloader.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize welcome page
+    console.log('Welcome page loaded for study:', '{{ study._id }}');
+    console.log('cint redirect RID:', '{{ session.get("rid") }}');
+    
+    // Study data for preloading (already serialized by backend)
+    let studyData;
+    try {
+        // Check if serialized_study_data exists and is not None
+        {% if serialized_study_data %}
+        studyData = {{ serialized_study_data|tojson|safe }};
+        console.log('Study data loaded successfully:', studyData);
+        {% else %}
+        console.warn('serialized_study_data is None/undefined, using fallback');
+        studyData = {
+            study_type: '{{ study.study_type }}',
+            elements: [],
+            study_layers: []
+        };
+        {% endif %}
+    } catch (error) {
+        console.error('Error loading study data:', error);
+        // Fallback data
+        studyData = {
+            study_type: '{{ study.study_type }}',
+            elements: [],
+            study_layers: []
+        };
+    }
+    
+    // Validate studyData structure
+    if (!studyData || typeof studyData !== 'object') {
+        console.error('Invalid studyData structure:', studyData);
+        studyData = {
+            study_type: '{{ study.study_type }}',
+            elements: [],
+            study_layers: []
+        };
+    }
+    
+    // Study data loaded for preloading
+    
+    // Preload progress elements
+    const preloadProgress = document.getElementById('preloadProgress');
+    const preloadProgressFill = document.getElementById('preloadProgressFill');
+    const preloadDetails = document.getElementById('preloadDetails');
+    
+    // Start silent image preloading if we have valid data
+    if (studyData && studyData.study_type) {
+        startSilentImagePreloading();
+    } else {
+        console.log('Skipping preloading - no valid study data');
+    }
+    
+    function startSilentImagePreloading() {
+        // Debug: Log study data structure
+        console.log('🚀 Starting silent preloading with study data:', studyData);
+        console.log('🚀 Study type:', studyData.study_type);
+        console.log('🚀 Elements:', studyData.elements);
+        console.log('🚀 Study layers:', studyData.study_layers);
+        console.log('🚀 Elements count:', studyData.elements ? studyData.elements.length : 0);
+        console.log('🚀 Layers count:', studyData.study_layers ? studyData.study_layers.length : 0);
+        
+        // Start silent preloading - no UI indicators
+        window.imagePreloader.preloadStudyImagesSilent(studyData);
+    }
+    
+    // Initialize welcome page animations immediately
+    initializeWelcomeAnimations();
+    
+    function initializeWelcomeAnimations() {
+        // Add smooth transitions
+        const welcomeSection = document.querySelector('.welcome-section');
+        if (welcomeSection) {
+            welcomeSection.style.opacity = '0';
+            welcomeSection.style.transform = 'translateY(20px)';
+            
+            setTimeout(() => {
+                welcomeSection.style.transition = 'all 0.6s ease-out';
+                welcomeSection.style.opacity = '1';
+                welcomeSection.style.transform = 'translateY(0)';
+            }, 100);
+        }
+        
+        // Start study button animation
+        const startBtn = document.querySelector('.start-study-btn');
+        if (startBtn) {
+            startBtn.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-2px) scale(1.02)';
+            });
+            
+            startBtn.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0) scale(1)';
+            });
+            
+            startBtn.addEventListener('click', function() {
+                this.style.transform = 'translateY(1px) scale(0.98)';
+                setTimeout(() => {
+                    this.style.transform = 'translateY(0) scale(1)';
+                }, 150);
+            });
+        }
+    }
+    
+    console.log('Welcome page initialized with silent image preloading');
+});
+</script>
+{% endblock %}

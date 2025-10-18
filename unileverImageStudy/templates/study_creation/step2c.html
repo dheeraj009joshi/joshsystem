@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+
+{% block title %}Create Study - Step 2c{% endblock %}
+
+{% block content %}
+<div class="study-creation-container">
+    <!-- Progress Bar -->
+            {{ study_progress_bar('2c', draft.get_step_data('1b').get('study_type', 'grid') if draft.get_step_data('1b') else 'grid', draft) }}
+
+    <div class="step-content">
+        <div class="step-header">
+            <h1 class="step-title">Step 2c: RDE Algorithm Parameters</h1>
+            <p class="step-description">Configure the parameters that will be used to generate the RDE task matrix</p>
+        </div>
+
+        <form method="POST" class="step-form" data-validate="true" data-loading="true">
+            {{ form.hidden_tag() }}
+            
+            <!-- Hidden field for calculated tasks per consumer -->
+            <input type="hidden" name="calculated_tasks_per_consumer" id="calculated-tasks-per-consumer-hidden">
+            
+            <div class="study-form-group">
+                <h3 class="section-title">RDE Algorithm Parameters</h3>
+                <p class="form-help">Configure the parameters that will be used to generate the RDE task matrix.</p>
+                
+              
+                
+                <div class="study-form-row">
+                    <div class="study-form-col">
+                        <div class="study-form-group">
+                            {{ form.number_of_respondents.label(class="study-form-label study-form-label--required") }}
+                            {{ form.number_of_respondents(class="study-form-control", value=form.number_of_respondents.data or 20) }}
+                            {% if form.number_of_respondents.errors %}
+                                <div class="error-message">
+                                    {% for error in form.number_of_respondents.errors %}
+                                        <span>{{ error }}</span>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <small class="form-help">Number of respondents who will participate in your study</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Auto-calculated Tasks per Consumer field -->
+                <div class="study-form-row">
+                    <div class="study-form-col">
+                        <div class="study-form-group">
+                            <label class="study-form-label study-form-label--required">Tasks per Consumer</label>
+                            <input type="number" id="tasks-per-consumer-field" class="study-form-control" readonly>
+                            <small class="form-help">Automatically calculated based on number of elements and algorithm optimization</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Auto-calculated parameters display -->
+                <div class="study-form-group">
+                    <h4 class="section-subtitle">Auto-calculated Parameters</h4>
+                    <div class="info-box">
+                        <div class="info-item">
+                            <strong>Number of Elements:</strong> 
+                            <span id="num-elements-display">
+                                {% if draft.get_step_data('2a') and draft.get_step_data('2a').get('elements') %}
+                                    {{ draft.get_step_data('2a').get('elements')|length }}
+                                {% elif draft.get_step_data('2a') and draft.get_step_data('2a').get('num_elements') %}
+                                    {{ draft.get_step_data('2a').get('num_elements') }}
+                                {% else %}
+                                    Not set
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="info-item">
+                            <strong>Active Elements per Task (K):</strong> 
+                            <span id="k-value-display">
+                                {% if draft.get_step_data('2c') and draft.get_step_data('2c').get('num_elements') %}
+                                    {% set num_elements = draft.get_step_data('2c').get('num_elements') %}
+                                    {% if num_elements <= 8 %}2{% elif num_elements <= 16 %}3{% else %}4{% endif %}
+                                {% else %}
+                                    Calculating...
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="info-item">
+                            <strong>Tasks per Consumer:</strong> 
+                            <span id="tasks-per-consumer-display">
+                                {% if draft.get_step_data('2c') and draft.get_step_data('2c').get('tasks_per_consumer') %}
+                                    {{ draft.get_step_data('2c').get('tasks_per_consumer') }}
+                                {% else %}
+                                    Calculating...
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="info-item">
+                            <strong>Total Tasks:</strong> 
+                            <span id="total-tasks-display">
+                                {% if draft.get_step_data('2c') and draft.get_step_data('2c').get('total_tasks') %}
+                                    {{ draft.get_step_data('2c').get('total_tasks') }}
+                                {% else %}
+                                    Calculating...
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="info-item">
+                            <strong>Exposure Tolerance (CV %):</strong> 
+                            <span id="exposure-tolerance-display">
+                                {% if draft.get_step_data('2c') and draft.get_step_data('2c').get('exposure_tolerance_cv') %}
+                                    {{ draft.get_step_data('2c').get('exposure_tolerance_cv') }}%
+                                {% else %}
+                                    1.0% (default)
+                                {% endif %}
+                            </span>
+                        </div>
+                        <small class="form-help">
+                            These parameters are automatically calculated based on your study configuration.
+                            K is determined by the number of elements, and tasks per consumer is optimized for uniqueness.
+                        </small>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="study-form-group">
+                <h3 class="section-title">Parameter Summary</h3>
+                <div class="parameter-summary">
+                    <div class="summary-item">
+                        <span class="summary-label">Elements:</span>
+                        <span class="summary-value" id="summaryElements">
+                            {% if draft.get_step_data('2a') and draft.get_step_data('2a').get('elements') %}
+                                {{ draft.get_step_data('2a').get('elements')|length }}
+                            {% elif draft.get_step_data('2a') and draft.get_step_data('2a').get('num_elements') %}
+                                {{ draft.get_step_data('2a').get('num_elements') }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Tasks per Respondent:</span>
+                        <span class="summary-value" id="summaryTasksPerConsumer">
+                            {% if draft.get_step_data('2c') and draft.get_step_data('2c').get('tasks_per_consumer') %}
+                                {{ draft.get_step_data('2c').get('tasks_per_consumer') }}
+                            {% else %}
+                                Auto-calculated
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Total Respondents:</span>
+                        <span class="summary-value" id="summaryRespondents">
+                            {% if draft.get_step_data('2c') and draft.get_step_data('2c').get('number_of_respondents') %}
+                                {{ draft.get_step_data('2c').get('number_of_respondents') }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Total Tasks:</span>
+                        <span class="summary-value" id="summaryTotalTasks">
+                            {% if draft.get_step_data('2c') and draft.get_step_data('2c').get('total_tasks') %}
+                                {{ draft.get_step_data('2c').get('total_tasks') }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Algorithm:</span>
+                        <span class="summary-value">RDE Grid Study</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="step-actions">
+                <a href="{{ url_for('study_creation.step2a') }}" class="btn btn--secondary step-nav-btn">← Previous</a>
+                {{ form.submit(class="btn btn--primary step-nav-btn") }}
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Step2c page loaded');
+    
+    // Debug: Log form field value
+    const respondentField = document.getElementById('{{ form.number_of_respondents.id }}');
+    console.log('Respondent field:', respondentField);
+    console.log('Initial value:', respondentField ? respondentField.value : 'Field not found');
+    
+    // Calculate and display auto-calculated parameters
+    function updateCalculatedParameters() {
+        const numRespondents = parseInt(document.getElementById('{{ form.number_of_respondents.id }}').value) || 0;
+        console.log('Updating parameters with respondents:', numRespondents);
+        
+        // Get number of elements from the display (set from step2a)
+        const numElementsText = document.getElementById('num-elements-display').textContent;
+        const numElements = parseInt(numElementsText) || 0;
+        console.log('Number of elements:', numElements);
+        
+        if (numRespondents > 0 && numElements >= 4) {
+            // Calculate K based on number of elements (from script logic)
+            let K;
+            if (numElements <= 8) {
+                K = 2;
+            } else if (numElements <= 16) {
+                K = 3;
+            } else {
+                K = 4;
+            }
+            
+            // Use backend-calculated value if available, otherwise fallback to simple calculation
+            const backendCalculatedTasks = {{ calculated_tasks_per_consumer|default('null') }};
+            let tasksPerConsumer;
+            
+            if (backendCalculatedTasks !== null) {
+                tasksPerConsumer = backendCalculatedTasks;
+                console.log('Using backend-calculated tasks per consumer:', tasksPerConsumer);
+            } else {
+                // Fallback to simple calculation
+                const maxTasksPerConsumer = calculateCombination(numElements, K);
+                tasksPerConsumer = Math.min(24, Math.floor(maxTasksPerConsumer / 2));
+                console.log('Using fallback calculation:', tasksPerConsumer);
+            }
+            
+            // Calculate total tasks
+            const totalTasks = tasksPerConsumer * numRespondents;
+            
+            console.log('Calculated values - K:', K, 'Tasks per consumer:', tasksPerConsumer, 'Total tasks:', totalTasks);
+            
+            // Update displays
+            document.getElementById('k-value-display').textContent = K;
+            document.getElementById('tasks-per-consumer-display').textContent = tasksPerConsumer;
+            document.getElementById('total-tasks-display').textContent = totalTasks.toLocaleString();
+            
+            // Update the Tasks per Consumer field
+            document.getElementById('tasks-per-consumer-field').value = tasksPerConsumer;
+            
+            // Update the hidden field for form submission
+            document.getElementById('calculated-tasks-per-consumer-hidden').value = tasksPerConsumer;
+            
+            // Update summary
+            document.getElementById('summaryElements').textContent = numElements;
+            document.getElementById('summaryTasksPerConsumer').textContent = tasksPerConsumer;
+            document.getElementById('summaryRespondents').textContent = numRespondents;
+            document.getElementById('summaryTotalTasks').textContent = totalTasks.toLocaleString();
+            
+        } else if (numElements < 4) {
+            document.getElementById('k-value-display').textContent = 'Need at least 4 elements';
+            document.getElementById('tasks-per-consumer-display').textContent = 'Need at least 4 elements';
+            document.getElementById('total-tasks-display').textContent = 'Need at least 4 elements';
+            document.getElementById('tasks-per-consumer-field').value = '';
+        } else {
+            document.getElementById('k-value-display').textContent = 'Enter number of respondents (min 1)';
+            document.getElementById('tasks-per-consumer-display').textContent = 'Enter number of respondents (min 1)';
+            document.getElementById('total-tasks-display').textContent = 'Enter number of respondents (min 1)';
+            document.getElementById('tasks-per-consumer-field').value = '';
+        }
+    }
+    
+    // Calculate combination C(n,k)
+    function calculateCombination(n, k) {
+        if (k > n) return 0;
+        if (k === 0 || k === n) return 1;
+        
+        let result = 1;
+        for (let i = 1; i <= k; i++) {
+            result = result * (n - i + 1) / i;
+        }
+        return Math.floor(result);
+    }
+    
+    // Update when any parameter changes
+    if (respondentField) {
+        respondentField.addEventListener('input', updateCalculatedParameters);
+        console.log('Added input event listener to respondent field');
+    } else {
+        console.error('Respondent field not found!');
+    }
+    
+    // Initial calculation
+    updateCalculatedParameters();
+    
+    // Force update after a short delay to ensure DOM is ready
+    setTimeout(updateCalculatedParameters, 100);
+});
+</script>
+{% endblock %}

@@ -1,0 +1,1087 @@
+{% extends "base.html" %}
+
+{% block title %}Create Study - Step 3b{% endblock %}
+
+{% block content %}
+<div class="study-creation-container">
+    <!-- Progress Bar -->
+            {{ study_progress_bar('3b', draft.get_step_data('1b').get('study_type', 'grid') if draft.get_step_data('1b') else 'grid', draft) }}
+
+    <div class="step-content">
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
+        <div class="step-header">
+            <h1 class="step-title">Step 3b: Study Preview & Launch</h1>
+            <p class="step-description">Review your study and launch it</p>
+        </div>
+
+        <div class="study-preview">
+            <h3 class="section-title">Study Preview</h3>
+            <p class="form-help">Review all the details of your study before launching. Make sure everything is correct.</p>
+                
+                <div class="preview-sections">
+                    <!-- Basic Details -->
+                    <div class="preview-section">
+                        <h4>Basic Details</h4>
+                        <div class="preview-grid">
+                            <div class="preview-item">
+                                <span class="preview-label">Title:</span>
+                                <span class="preview-value">{{ study_data.step1a.title }}</span>
+                            </div>
+                            <div class="preview-item">
+                                <span class="preview-label">Background:</span>
+                                <span class="preview-value">{{ study_data.step1a.background }}</span>
+                            </div>
+                            <div class="preview-item">
+                                <span class="preview-label">Language:</span>
+                                <span class="preview-value">{{ study_data.step1a.language }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Study Configuration -->
+                    <div class="preview-section">
+                        <h4>Study Configuration</h4>
+                        <div class="preview-grid">
+                            <div class="preview-item">
+                                <span class="preview-label">Study Type:</span>
+                                <span class="preview-value">{{ study_data.step1b.study_type }}</span>
+                            </div>
+                            <div class="preview-item">
+                                <span class="preview-label">Main Question:</span>
+                                <span class="preview-value">{{ study_data.step1b.main_question }}</span>
+                            </div>
+                            <div class="preview-item">
+                                <span class="preview-label">Orientation Text:</span>
+                                <span class="preview-value">{{ study_data.step1b.orientation_text }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Rating Scale -->
+                    <div class="preview-section">
+                        <h4>Rating Scale</h4>
+                        <div class="preview-grid">
+                            <div class="preview-item">
+                                <span class="preview-label">Scale Range:</span>
+                                <span class="preview-value">{{ study_data.step1c.min_value }} - {{ study_data.step1c.max_value }}</span>
+                            </div>
+                            <div class="preview-item">
+                                <span class="preview-label">Min Label:</span>
+                                <span class="preview-value">{{ study_data.step1c.min_label }}</span>
+                            </div>
+                            <div class="preview-item">
+                                <span class="preview-label">Max Label:</span>
+                                <span class="preview-value">{{ study_data.step1c.max_label }}</span>
+                            </div>
+                            {% if study_data.step1c.middle_label %}
+                            <div class="preview-item">
+                                <span class="preview-label">Middle Label:</span>
+                                <span class="preview-value">{{ study_data.step1c.middle_label }}</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- Study Elements -->
+                    <div class="preview-section">
+                        <h4>Study Elements</h4>
+                        
+                        {% if study_data.layer_config and study_data.layer_config.layers %}
+                            <!-- New Layer Structure -->
+                            <div class="layers-preview">
+                                <h5>Layers Configuration ({{ study_data.layer_config.layers|length }} layers)</h5>
+                                <div class="layers-grid">
+                                    {% for layer in study_data.layer_config.layers %}
+                                    <div class="layer-preview-card">
+                                        <div class="layer-header">
+                                            <h6>{{ layer.name }}</h6>
+                                            <span class="layer-order">z-{{ layer.z_index }}</span>
+                                        </div>
+                                        {% if layer.description %}
+                                        <p class="layer-description">{{ layer.description }}</p>
+                                        {% endif %}
+                                        <div class="layer-images">
+                                            <strong>Images ({{ layer.images|length }}):</strong>
+                                            <div class="images-preview-grid">
+                                                {% for image in layer.images %}
+                                                <div class="image-preview-item">
+                                                    <img src="{{ image.url }}" alt="{{ image.alt_text }}" class="preview-thumbnail">
+                                                    <div class="image-info">
+                                                        <span class="image-name">{{ image.name }}</span>
+                                                        {% if image.alt_text %}
+                                                        <small class="alt-text">Alt: {{ image.alt_text }}</small>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        {% elif study_data.grid_config and study_data.grid_config.categories %}
+                            <!-- New Grid Categories Structure -->
+                            <div class="categories-preview">
+                                <h5>Study Categories ({{ study_data.grid_config.categories|length }} categories)</h5>
+                                <div class="categories-grid">
+                                    {% for category in study_data.grid_config.categories %}
+                                    <div class="category-preview-card">
+                                        <div class="category-header">
+                                            <h6>{{ category.category_name }}</h6>
+                                            <span class="category-count">{{ category.elements|length }} elements</span>
+                                        </div>
+                                        {% if category.category_description %}
+                                        <p class="category-description">{{ category.category_description }}</p>
+                                        {% endif %}
+                                        <div class="category-elements">
+                                            <div class="elements-preview-grid">
+                                                {% for element in category.elements %}
+                                                <div class="element-preview-item">
+                                                    {% if element.content %}
+                                                        <img src="{{ element.content }}" 
+                                                             alt="{{ element.alt_text or element.name }}" 
+                                                             class="element-preview-thumbnail"
+                                                             onerror="this.style.display='none';">
+                                                    {% else %}
+                                                        <div class="element-preview-placeholder">
+                                                            <i class="fas fa-image"></i>
+                                                        </div>
+                                                    {% endif %}
+                                                    <div class="element-info">
+                                                        <span class="element-name">{{ element.name.split('.')[1] or 'Unnamed Element' }}</span>
+                                                        {% if element.description %}
+                                                        <small class="element-description">{{ element.description }}</small>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        {% elif study_data.step2a and study_data.step2a.elements %}
+                            <!-- Legacy Grid Study Elements -->
+                            <div class="elements-preview">
+                                <h5>Study Elements ({{ study_data.step2a.elements|length }})</h5>
+                                <div class="elements-scrollable-container">
+                                    <div class="elements-simple-grid">
+                                        {% for element in study_data.step2a.elements %}
+                                        <div class="element-simple-card">
+                                            <div class="element-name">{{ element.name or 'Unnamed Element' }}</div>
+                                            {% if element.content %}
+                                                <img src="{{ element.content }}" 
+                                                     alt="{{ element.alt_text or element.name }}" 
+                                                     class="element-simple-image"
+                                                     onerror="this.style.display='none';">
+                                            {% endif %}
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                        {% elif study_data.layer_config and study_data.layer_config.layers %}
+                            <!-- New Layer Structure -->
+                            <div class="layers-preview">
+                                <h5>Layers ({{ study_data.layer_config.layers|length }} layers)</h5>
+                                {% for layer in study_data.layer_config.layers %}
+                                <div class="layer-preview">
+                                    <h6>{{ layer.name }}</h6>
+                                    {% if layer.description %}
+                                    <p>{{ layer.description }}</p>
+                                    {% endif %}
+                                    <div class="layer-images">
+                                        <strong>Images ({{ layer.images|length }}):</strong>
+                                        <ul>
+                                            {% for image in layer.images %}
+                                            <li>{{ image.name }}: {{ image.alt_text or 'No alt text' }}</li>
+                                            {% endfor %}
+                                        </ul>
+                                    </div>
+                                    <div class="layer-properties">
+                                        <small><strong>Z-Index:</strong> {{ layer.z_index }} | <strong>Order:</strong> {{ layer.order }}</small>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="no-elements">
+                                <p>No study elements found. Please complete the elements configuration first.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Classification Questions -->
+                    {% if study_data.step2b.questions %}
+                    <div class="preview-section">
+                        <h4>Classification Questions ({{ study_data.step2b.questions|length }})</h4>
+                        <div class="questions-preview">
+                            {% for question in study_data.step2b.questions %}
+                            <div class="question-preview">
+                                <h5>{{ question.question_text }}</h5>
+                                                            <div class="question-details">
+                                <span class="question-type">Single Choice</span>
+                                {% if question.is_required %}
+                                    <span class="required-badge">Required</span>
+                                {% endif %}
+                            </div>
+                                {% if question.answer_options %}
+                                <div class="answer-options">
+                                    <strong>Options:</strong>
+                                    <ul>
+                                        {% for option in question.answer_options %}
+                                        <li>{{ option }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- IPED Parameters -->
+                    <div class="preview-section">
+                        <h4>RDE Parameters</h4>
+                        <div class="preview-grid">
+                            {% if study_data.step1b.study_type == 'grid' %}
+                                <!-- Grid Study Parameters -->
+                                <div class="preview-item">
+                                    <span class="preview-label">Number of Elements:</span>
+                                    <span class="preview-value">{{ (study_data.step2c.num_elements) or (study_data.grid_iped_calculated.num_elements) }}</span>
+                                </div>
+                                <div class="preview-item">
+                                    <span class="preview-label">Tasks per Respondent:</span>
+                                    <span class="preview-value">{{ (study_data.step2c.tasks_per_consumer) or (study_data.grid_iped_calculated.tasks_per_consumer) }}</span>
+                                </div>
+                                <div class="preview-item">
+                                    <span class="preview-label">Number of Respondents:</span>
+                                    <span class="preview-value">{{ (study_data.step2c.number_of_respondents) or (study_data.grid_iped_calculated.number_of_respondents) }}</span>
+                                </div>
+                                <div class="preview-item">
+                                    <span class="preview-label">Total Tasks:</span>
+                                    <span class="preview-value">{{ (study_data.step2c.total_tasks) or (study_data.grid_iped_calculated.total_tasks) }}</span>
+                                </div>
+                            {% else %}
+                                <!-- Layer Study Parameters -->
+                                <div class="preview-item">
+                                    <span class="preview-label">Total Layers:</span>
+                                    <span class="preview-value">{{ study_data.layer_iped_calculated.total_layers }}</span>
+                                </div>
+                                <div class="preview-item">
+                                    <span class="preview-label">Total Images:</span>
+                                    <span class="preview-value">{{ study_data.layer_iped_calculated.total_images }}</span>
+                                </div>
+                                <div class="preview-item">
+                                    <span class="preview-label">Tasks per Respondent:</span>
+                                    <span class="preview-value">{{ study_data.layer_iped_calculated.tasks_per_consumer }}</span>
+                                </div>
+                                <div class="preview-item">
+                                    <span class="preview-label">Number of Respondents:</span>
+                                    <span class="preview-value">{{ study_data.layer_iped_calculated.number_of_respondents }}</span>
+                                </div>
+                                <div class="preview-item">
+                                    <span class="preview-label">Uniqueness Capacity:</span>
+                                    <span class="preview-value">{{ study_data.layer_iped_calculated.uniqueness_capacity }}</span>
+                                </div>
+                                <div class="preview-item">
+                                    <span class="preview-label">Total Tasks:</span>
+                                    <span class="preview-value">{{ study_data.layer_iped_calculated.total_tasks }}</span>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- Task Matrix -->
+                    {% if study_data.step3a.tasks_matrix %}
+                    <div class="preview-section">
+                        <h4>Task Matrix</h4>
+                        <div class="matrix-summary">
+                            <p><strong>Status:</strong> <span class="text-success">Generated Successfully</span></p>
+                            <p><strong>Generated at:</strong> {{ study_data.step3a.generated_at }}</p>
+                            <p><strong>Matrix contains:</strong> {{ study_data.step3a.tasks_matrix.total_tasks }} tasks for {{ study_data.step3a.tasks_matrix.total_respondents }} respondents</p>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Launch Form -->
+            <div class="launch-section">
+                <h3>Launch Study</h3>
+                <p class="form-help">Once you launch your study, it will be available to respondents and you can start collecting data.</p>
+                
+                <form method="POST" class="study-form step-form" data-validate="true" data-loading="true">
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="form-group">
+                        <div class="checkbox-wrapper">
+                            {{ form.launch_study(class="form-check-input", id="launchCheckbox", required=True) }}
+                            {{ form.launch_study.label(class="form-label", for="launchCheckbox") }}
+                        </div>
+                        <small class="form-help-text">I confirm that I have reviewed all study details and am ready to launch</small>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <a href="{{ url_for('study_creation.step3a') }}" class="btn btn-secondary">Previous</a>
+                        {{ form.submit(class="btn btn-success", id="launchSubmitBtn") }}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('form[data-loading="true"]');
+    const submitBtn = document.getElementById('launchSubmitBtn');
+    const launchCheckbox = document.getElementById('launchCheckbox');
+    
+    if (form && submitBtn) {
+        // Disable submit until checkbox is checked
+        if (launchCheckbox) {
+            submitBtn.disabled = !launchCheckbox.checked;
+            launchCheckbox.addEventListener('change', function() {
+                submitBtn.disabled = !launchCheckbox.checked;
+            });
+        }
+        form.addEventListener('submit', function(e) {
+            if (launchCheckbox && !launchCheckbox.checked) {
+                e.preventDefault();
+                launchCheckbox.reportValidity();
+                return;
+            }
+            // Show loading state using the base.js system
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="loading-spinner"></span> Launching...';
+            
+            // Show loading overlay with custom message
+            if (window.MindSurve && window.MindSurve.app) {
+                window.MindSurve.app.showLoading('Launching Study...');
+            } else if (window.MindSurve) {
+                // Fallback to global method
+                window.MindSurve.showLoading('Launching Study...');
+            } else {
+                // Direct fallback if nothing else works
+                const overlay = document.getElementById('loading-overlay');
+                if (overlay) {
+                    const textElement = overlay.querySelector('.loading-overlay-text');
+                    if (textElement) {
+                        textElement.textContent = 'Launching Study...';
+                    }
+                    overlay.classList.add('is-visible');
+                }
+            }
+            
+            console.log('Launching study...');
+        });
+    }
+});
+</script>
+
+<style>
+/* Professional Study Preview Styling */
+.preview-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+}
+
+.preview-section {
+    background: linear-gradient(135deg, #ffffff, #f8f9fa);
+    padding: 2rem;
+    border-radius: 16px;
+    border: 1px solid #e9ecef;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.preview-section::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #007bff, #0056b3, #007bff);
+}
+
+.preview-section:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+.preview-section h4 {
+    margin-bottom: 1.5rem;
+    color: #2c3e50;
+    font-size: 1.4rem;
+    font-weight: 700;
+    border-bottom: 3px solid #007bff;
+    padding-bottom: 0.75rem;
+    position: relative;
+}
+
+.preview-section h4::after {
+    content: '';
+    position: absolute;
+    bottom: -3px;
+    left: 0;
+    width: 60px;
+    height: 3px;
+    background: linear-gradient(90deg, #28a745, #20c997);
+}
+
+.preview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+
+.preview-item {
+    background: white;
+    padding: 1.25rem;
+    border-radius: 12px;
+    border: 1px solid #e9ecef;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+}
+
+.preview-item:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    border-color: #007bff;
+}
+
+.preview-label {
+    font-weight: 600;
+    color: #6c757d;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5rem;
+    display: block;
+}
+
+.preview-value {
+    color: #2c3e50;
+    font-size: 1.1rem;
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+/* Enhanced Elements Preview */
+.elements-preview, .questions-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.element-preview, .question-preview {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    border: 1px solid #e9ecef;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+}
+
+.element-preview:hover, .question-preview:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    border-color: #007bff;
+}
+
+.element-header, .question-details {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #f8f9fa;
+}
+
+.element-type, .question-type {
+    background: linear-gradient(135deg, #6c757d, #495057);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.required-badge {
+    background: linear-gradient(135deg, #28a745, #20c997);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.element-description {
+    color: #6c757d;
+    font-style: italic;
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 4px solid #007bff;
+}
+
+.element-content {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 8px;
+    border-left: 4px solid #007bff;
+    margin-top: 1rem;
+}
+
+.element-content strong {
+    color: #495057;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    display: block;
+}
+
+.text-content {
+    background: white;
+    padding: 0.75rem;
+    border-radius: 6px;
+    border: 1px solid #e9ecef;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.image-container {
+    text-align: center;
+    margin: 1rem 0;
+}
+
+.element-image {
+    max-width: 100%;
+    max-height: 200px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transition: transform 0.3s ease;
+}
+
+.element-image:hover {
+    transform: scale(1.05);
+}
+
+.alt-text {
+    display: block;
+    margin-top: 0.5rem;
+    color: #6c757d;
+    font-size: 0.85rem;
+    font-style: italic;
+}
+
+.no-image {
+    background: #f8f9fa;
+    padding: 2rem;
+    text-align: center;
+    border-radius: 8px;
+    color: #6c757d;
+    border: 2px dashed #dee2e6;
+}
+
+/* Enhanced Answer Options */
+.answer-options {
+    margin-top: 1rem;
+}
+
+.answer-options strong {
+    color: #495057;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    display: block;
+}
+
+.answer-options ul {
+    margin: 0.5rem 0 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.answer-options li {
+    background: white;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.5rem;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+    transition: all 0.3s ease;
+    position: relative;
+    padding-left: 2.5rem;
+}
+
+.answer-options li::before {
+    content: '✓';
+    position: absolute;
+    left: 1rem;
+    color: #28a745;
+    font-weight: bold;
+    font-size: 1.1rem;
+}
+
+.answer-options li:hover {
+    background: #f8f9fa;
+    border-color: #007bff;
+    transform: translateX(5px);
+}
+
+/* Enhanced Matrix Summary */
+.matrix-summary {
+    background: linear-gradient(135deg, #28a745, #20c997);
+    color: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(40, 167, 69, 0.3);
+    text-align: center;
+}
+
+.matrix-summary p {
+    margin: 0.5rem 0;
+    font-size: 1.1rem;
+}
+
+.matrix-summary .text-success {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-weight: 600;
+    display: inline-block;
+}
+
+/* Enhanced Launch Section */
+.launch-section {
+    margin-top: 3rem;
+    padding: 2.5rem;
+    background: linear-gradient(135deg, #ffffff, #f8f9fa);
+    border-radius: 20px;
+    border: 3px solid #28a745;
+    box-shadow: 0 8px 30px rgba(40, 167, 69, 0.2);
+    position: relative;
+    overflow: hidden;
+}
+
+.launch-section::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 6px;
+    background: linear-gradient(90deg, #28a745, #20c997, #28a745);
+}
+
+.launch-section h3 {
+    color: #28a745;
+    margin-bottom: 1.5rem;
+    font-size: 1.8rem;
+    font-weight: 700;
+    text-align: center;
+    position: relative;
+}
+
+.launch-section h3::after {
+    content: '🚀';
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.5rem;
+}
+
+.checkbox-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding: 1.5rem;
+    background: white;
+    border-radius: 12px;
+    border: 2px solid #e9ecef;
+    transition: all 0.3s ease;
+}
+
+.checkbox-wrapper:hover {
+    border-color: #28a745;
+    box-shadow: 0 4px 16px rgba(40, 167, 69, 0.1);
+}
+
+.checkbox-wrapper input[type="checkbox"] {
+    width: 24px;
+    height: 24px;
+    margin: 0;
+    accent-color: #28a745;
+    cursor: pointer;
+}
+
+.checkbox-wrapper label {
+    margin: 0;
+    font-weight: 600;
+    font-size: 1.1rem;
+    color: #2c3e50;
+    cursor: pointer;
+}
+
+.form-help-text {
+    color: #6c757d;
+    font-size: 0.9rem;
+    font-style: italic;
+    margin-left: 2.5rem;
+}
+
+/* Enhanced Form Actions */
+.form-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 2px solid #e9ecef;
+}
+
+.btn {
+    padding: 1rem 2rem;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 1rem;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.3s ease;
+    border: none;
+    cursor: pointer;
+}
+
+.btn-secondary {
+    background: linear-gradient(135deg, #6c757d, #495057);
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: linear-gradient(135deg, #495057, #343a40);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(108, 117, 125, 0.3);
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #28a745, #20c997);
+    color: white;
+}
+
+.btn-success:hover {
+    background: linear-gradient(135deg, #20c997, #28a745);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(40, 167, 69, 0.3);
+}
+
+/* Enhanced Layers Preview */
+.layers-preview {
+    margin-top: 1rem;
+}
+
+.layers-preview h5 {
+    color: #495057;
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #007bff;
+}
+
+.layers-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+/* Categories Preview Styles */
+.categories-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 1.5rem;
+}
+
+.category-preview-card {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    border: 1px solid #e9ecef;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+}
+
+.category-preview-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    border-color: #007bff;
+}
+
+.category-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #f8f9fa;
+}
+
+.category-header h6 {
+    color: #2c3e50;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.category-count {
+    background: linear-gradient(135deg, #28a745, #20c997);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.category-description {
+    color: #6c757d;
+    font-style: italic;
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 4px solid #28a745;
+}
+
+.elements-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.element-preview-item {
+    text-align: center;
+    background: white;
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+    transition: all 0.3s ease;
+}
+
+.element-preview-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    border-color: #28a745;
+}
+
+.element-preview-thumbnail {
+    max-width: 100%;
+    max-height: 60px;
+    border-radius: 6px;
+    object-fit: cover;
+    margin-bottom: 0.5rem;
+}
+
+.element-preview-placeholder {
+    width: 60px;
+    height: 60px;
+    background: #f8f9fa;
+    border: 2px dashed #dee2e6;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 0.5rem;
+    color: #6c757d;
+    font-size: 1.5rem;
+}
+
+.element-info {
+    text-align: center;
+}
+
+.element-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #495057;
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.element-description {
+    color: #6c757d;
+    font-size: 0.75rem;
+    display: block;
+}
+
+.layer-preview-card {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    border: 1px solid #e9ecef;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+}
+
+.layer-preview-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    border-color: #007bff;
+}
+
+.layer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #f8f9fa;
+}
+
+.layer-header h6 {
+    color: #2c3e50;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.layer-order {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.layer-description {
+    color: #6c757d;
+    font-style: italic;
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 4px solid #007bff;
+}
+
+.layer-images {
+    margin-top: 1rem;
+}
+
+.layer-images strong {
+    color: #495057;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    display: block;
+}
+
+.images-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.image-preview-item {
+    text-align: center;
+    background: white;
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+    transition: all 0.3s ease;
+}
+
+.image-preview-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    border-color: #007bff;
+}
+
+.preview-thumbnail {
+    max-width: 100%;
+    max-height: 80px;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+    transition: transform 0.3s ease;
+}
+
+.preview-thumbnail:hover {
+    transform: scale(1.1);
+}
+
+.image-info {
+    text-align: center;
+}
+
+.image-name {
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 0.9rem;
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.alt-text {
+    color: #6c757d;
+    font-size: 0.8rem;
+    font-style: italic;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .preview-section {
+        padding: 1.5rem;
+    }
+    
+    .preview-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .layers-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .images-preview-grid {
+        grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    }
+    
+    .form-actions {
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+</style>
+{% endblock %}

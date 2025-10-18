@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - {{ config.get('APP_NAME', 'Unilever Image Study') }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+{% endblock %}
+
+{% block content %}
+<!-- Dashboard Header -->
+<header class="dashboard-header">
+    <div class="container">
+        <div class="header-content">
+            <div class="header-text">
+                <h1 class="header-title">Welcome back, {{ current_user.username }}!</h1>
+                <p class="header-subtitle">Manage your research studies and track progress</p>
+            </div>
+            <div class="header-actions">
+                <a href="{{ url_for('study_creation.step1a') }}" 
+   class="btn btn--primary create-study-btn"
+   style="background: linear-gradient(135deg, #0066ff, #00c6ff);
+          color: #fff;
+          box-shadow: 0 6px 16px rgba(0, 102, 255, 0.35);
+          transition: all 0.25s ease-in-out;
+          text-decoration: none;">
+    Create New Study
+</a>
+
+            </div>
+        </div>
+    </div>
+</header>
+
+<!-- Statistics Overview -->
+<section class="stats-section">
+    <div class="container">
+        <h2 class="section-title">Overview</h2>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-content">
+                    <h3 class="stat-number">{{ stats.total_studies }}</h3>
+                    <p class="stat-label">Total Studies</p>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">🚀</div>
+                <div class="stat-content">
+                    <h3 class="stat-number">{{ stats.active_studies }}</h3>
+                    <p class="stat-label">Active Studies</p>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">📝</div>
+                <div class="stat-content">
+                    <h3 class="stat-number">{{ stats.draft_studies }}</h3>
+                    <p class="stat-label">Draft Studies</p>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">👥</div>
+                <div class="stat-content">
+                    <h3 class="stat-number">{{ stats.total_responses }}</h3>
+                    <p class="stat-label">Total Responses</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Quick Actions -->
+<section class="quick-actions-section">
+    <div class="container">
+        <h2 class="section-title">Quick Actions</h2>
+        <div class="quick-actions-grid">
+            <a href="{{ url_for('dashboard.studies') }}" class="action-card">
+                <div class="action-icon">📚</div>
+                <div class="action-content">
+                    <h3 class="action-title">View All Studies</h3>
+                    <p class="action-description">Browse and manage all your research studies</p>
+                </div>
+            </a>
+            
+            <a href="{{ url_for('study_creation.step1a') }}" class="action-card">
+                <div class="action-icon">➕</div>
+                <div class="action-content">
+                    <h3 class="action-title">Create New Study</h3>
+                    <p class="action-description">Start building a new research study</p>
+                </div>
+            </a>
+            
+            <a href="{{ url_for('dashboard.studies') }}?filter=active" class="action-card">
+                <div class="action-icon">🚀</div>
+                <div class="action-content">
+                    <h3 class="action-title">Active Studies</h3>
+                    <p class="action-description">View and manage your active studies</p>
+                </div>
+            </a>
+            
+            <a href="{{ url_for('dashboard.studies') }}?filter=draft" class="action-card">
+                <div class="action-icon">📝</div>
+                <div class="action-content">
+                    <h3 class="action-title">Draft Studies</h3>
+                    <p class="action-description">Continue working on your draft studies</p>
+                </div>
+            </a>
+        </div>
+    </div>
+</section>
+
+{% endblock %}
