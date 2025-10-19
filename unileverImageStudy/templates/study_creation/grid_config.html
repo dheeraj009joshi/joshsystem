@@ -849,6 +849,7 @@ async function uploadFileToAzure(file) {
         formData.append('file', file);
         formData.append('immediate_upload', 'true'); // Flag to indicate immediate upload
         formData.append('csrf_token', document.querySelector('[name="csrf_token"]').value);
+        formData.append('subdirectory', 'grid_categories'); // ensure correct subdirectory
         
         // Get the draft ID from the form
         const draftId = document.getElementById('draft_id')?.value;
@@ -857,6 +858,49 @@ async function uploadFileToAzure(file) {
             console.log('Using existing draft ID:', draftId);
         } else {
             console.warn('No draft ID found, will create new one');
+        }
+        
+        // Get category name for folder organization
+        let categoryName = null;
+        if (window.editingCategoryId) {
+            const category = (window.categories || []).find(c => c.category_id === window.editingCategoryId);
+            if (category && category.category_name) {
+                categoryName = category.category_name;
+            }
+        }
+        // Fallback: if adding a new category, read from the modal input
+        if (!categoryName) {
+            const modalInput = document.getElementById('categoryName');
+            if (modalInput && modalInput.value) {
+                categoryName = modalInput.value;
+            }
+        }
+        if (categoryName) {
+            formData.append('category_name', categoryName);
+            console.log('Using category name for upload:', categoryName);
+        } else {
+            console.warn('No category name resolved for upload; will upload without category subfolder');
+        }
+        
+        // Try to pass study title as well (server also falls back to draft)
+        let studyTitle = null;
+        const titleElIds = ['study_title', 'title', 'studyTitle'];
+        for (const id of titleElIds) {
+            const el = document.getElementById(id);
+            if (el && el.value) {
+                studyTitle = el.value;
+                break;
+            }
+        }
+        if (!studyTitle) {
+            const meta = document.querySelector('[data-study-title]');
+            if (meta && meta.dataset.studyTitle) {
+                studyTitle = meta.dataset.studyTitle;
+            }
+        }
+        if (studyTitle) {
+            formData.append('study_title', studyTitle);
+            console.log('Including study title for upload:', studyTitle);
         }
         
         const response = await fetch('/study/create/upload-immediate', {
@@ -873,12 +917,11 @@ async function uploadFileToAzure(file) {
             console.log('File path:', result.file_path);
             return result.url;
         } else {
-            const errorText = await response.text();
-            console.error('Upload failed with status:', response.status, 'Error:', errorText);
-            throw new Error(`Upload failed: ${response.status} - ${errorText}`);
+            console.error('Upload failed');
+            return null;
         }
-    } catch (error) {
-        console.error('Error uploading file:', error);
+    } catch (err) {
+        console.error('Error uploading file:', err);
         return null;
     }
 }

@@ -41,6 +41,10 @@ class Config:
     SESSION_COOKIE_SAMESITE = 'Lax'
     WTF_CSRF_TIME_LIMIT = 36000  # 10 hours CSRF token expiry
     
+    # Rate Limiting Configuration
+    RATE_LIMIT_ENABLED = os.environ.get('RATE_LIMIT_ENABLED', 'true').lower() in ('true', '1', 'yes', 'on')
+    RATE_LIMIT_DEFAULT = os.environ.get('RATE_LIMIT_DEFAULT', '1000 per day, 500 per hour')
+    
     # Dynamic Application Configuration
     APP_NAME = os.environ.get('APP_NAME', 'Unilever Image Study')
     APP_DESCRIPTION = os.environ.get('APP_DESCRIPTION', 'Professional RDE Study System for Unilever Research and Data Collection')

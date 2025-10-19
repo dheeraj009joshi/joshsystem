@@ -51,19 +51,19 @@ def get_study_draft():
     #print(f"⏱️  [PERF]get_study_draft() total: {total_duration:.3f}s")
     return draft
 
-def save_uploaded_file(file, study_id, subdirectory=None):
+def save_uploaded_file(file, study_id, subdirectory=None, study_title=None, category_name=None, layer_name=None):
     """Save uploaded file using configured storage method and return URL."""
     if file and file.filename:
         # Use storage manager for unified handling
-        result = StorageManager.upload_file(file, study_id, subdirectory=subdirectory)
+        result = StorageManager.upload_file(file, study_id, subdirectory=subdirectory, study_title=study_title, category_name=category_name, layer_name=layer_name)
         if result:
             return result['url']  # Return URL for backward compatibility
     return None
 
-def save_uploaded_file_with_details(file, study_id, subdirectory=None):
+def save_uploaded_file_with_details(file, study_id, subdirectory=None, study_title=None, category_name=None, layer_name=None):
     """Save uploaded file using configured storage method and return full details."""
     if file and file.filename:
-        return StorageManager.upload_file(file, study_id, subdirectory=subdirectory)
+        return StorageManager.upload_file(file, study_id, subdirectory=subdirectory, study_title=study_title, category_name=category_name, layer_name=layer_name)
     return None
 
 @study_creation_bp.route('/')
@@ -464,11 +464,15 @@ def step2a():
                 # Upload each file using storage manager
                 for element_index, file_obj, filename in files_to_upload:
                     try:
+                        # Get study title from draft data
+                        study_title = (draft.get_step_data('1a') or {}).get('title')
+                        
                         result = StorageManager.upload_file(
                             file_obj, 
                             draft.id, 
                             filename=filename,
-                            subdirectory='grid_categories'
+                            subdirectory='grid_categories',
+                            study_title=study_title
                         )
                         
                         if result:
@@ -1478,7 +1482,8 @@ def step3b():
             
             # Move files from draft folder to final study folder (if using local storage)
             if current_app.config.get('USE_LOCAL_STORAGE', False):
-                StorageManager.move_draft_to_study(f"draft_{draft.id}", str(draft.id))
+                study_title = draft.get_step_data('1a')['title']
+                StorageManager.move_draft_to_study(f"draft_{draft.id}", str(draft.id), study_title)
             
             # Set rating scale
             step1c_data = draft.get_step_data('1c')
@@ -2123,11 +2128,23 @@ def layer_config():
                 # Upload each image using storage manager (handles both local and Azure)
                 for item in images_to_upload:
                     try:
+                        # Get study title from draft data
+                        study_title = (draft.get_step_data('1a') or {}).get('title')
+                        
+                        # Get layer name from processed layers
+                        layer_name = None
+                        for layer in processed_layers:
+                            if layer['layer_id'] == item['layer_id']:
+                                layer_name = layer['name']
+                                break
+                        
                         result = StorageManager.upload_file(
                             item['file'], 
                             draft.id, 
                             filename=item['filename'],
-                            subdirectory='layers'
+                            subdirectory='layers',
+                            study_title=study_title,
+                            layer_name=layer_name
                         )
                         
                         if result:
@@ -2184,10 +2201,14 @@ def layer_config():
                     print(f"📤 Processing default background: {background_file.filename}")
                     
                     # Upload background using storage manager
+                    # Get study title from draft data
+                    study_title = (draft.get_step_data('1a') or {}).get('title')
+                    
                     result = StorageManager.upload_file(
                         background_file, 
                         draft.id, 
-                        subdirectory='default_background'
+                        subdirectory='default_background',
+                        study_title=study_title
                     )
                     background_url = result['url'] if result else None
                     
@@ -2816,11 +2837,23 @@ def cleanup_base64_images():
             # Upload each image using storage manager
             for img_id, file_obj, filename in files_to_upload:
                 try:
+                    # Get study title from draft data
+                    study_title = (draft.get_step_data('1a') or {}).get('title')
+                    
+                    # Get layer name from base64_images
+                    layer_name = None
+                    for img in base64_images:
+                        if img['image_id'] == img_id:
+                            layer_name = img['layer_name']
+                            break
+                    
                     result = StorageManager.upload_file(
                         file_obj, 
                         draft.id, 
                         filename=filename,
-                        subdirectory='layers'
+                        subdirectory='layers',
+                        study_title=study_title,
+                        layer_name=layer_name
                     )
                     
                     if result:
@@ -2926,11 +2959,26 @@ def grid_config():
                             file_key = f'category_{category_index}_element_{element_index}_file'
                             if file_key in uploaded_files:
                                 try:
+                                    # Get category name for folder organization
+                                    category_name = category.get('category_name', f'category_{category_index + 1}')
+                                    
+                                    # Get study title from draft data
+                                    study_title = (draft.get_step_data('1a') or {}).get('title')
+                                    print(f"🔍 GRID UPLOAD DEBUG:")
+                                    print(f"   Study Title: '{study_title}'")
+                                    print(f"   Category Name: '{category_name}'")
+                                    print(f"   Draft ID: '{draft.id}'")
+                                    print(f"   File Key: '{file_key}'")
+                                    
                                     result = StorageManager.upload_file(
                                         uploaded_files[file_key], 
                                         draft.id,
-                                        subdirectory='grid_categories'
+                                        subdirectory='grid_categories',
+                                        category_name=category_name,
+                                        study_title=study_title
                                     )
+                                    
+                                    print(f"   Upload Result: {result}")
                                     if result:
                                         element['content'] = result['url']
                                         print(f"✅ Uploaded element: {element['name']} -> {result['url']}")
@@ -3222,23 +3270,48 @@ def upload_immediate():
         subdirectory = request.form.get('subdirectory', 'grid_categories')
         print(f"📤 Using existing draft ID: {draft_id}")
         
-        # Upload using storage manager
-        result = StorageManager.upload_file(file, draft_id, subdirectory=subdirectory)
+        # Get study title and category name
+        study_title = request.form.get('study_title') or None
+        category_name = request.form.get('category_name') or None
+        
+        try:
+            draft = StudyDraft.objects(id=draft_id).first()
+            if not study_title and draft:
+                study_title = (draft.get_step_data('1a') or {}).get('title')
+            # If category_name is missing, attempt to infer from current editing category on client
+            if not category_name and draft:
+                grid_data = draft.get_step_data('grid_config') or {}
+                categories = grid_data.get('categories', [])
+                # Heuristic: if only one category exists during first upload, use it
+                if isinstance(categories, list) and len(categories) == 1:
+                    category_name = categories[0].get('category_name')
+        except Exception as e:
+            print(f"❌ Error getting draft data: {e}")
+        
+        print("🔍 IMMEDIATE UPLOAD DEBUG:")
+        print(f"   Study Title: '{study_title}'")
+        print(f"   Category Name: '{category_name}'")
+        print(f"   Subdirectory: '{subdirectory}'")
+        
+        # Upload using storage manager with category name and study title
+        result = StorageManager.upload_file(
+            file,
+            draft_id,
+            subdirectory=subdirectory,
+            study_title=study_title,
+            category_name=category_name
+        )
         
         if result:
             print(f"✅ Upload successful: {result['url']}")
             return jsonify({
-                'url': result['url'], 
-                'file_path': result['file_path'],
-                'filename': result['filename'],
-                'success': True
+                'url': result['url'],
+                'file_path': result.get('file_path'),
+                'filename': result.get('filename'),
             })
         else:
-            print("❌ Upload failed")
+            print("❌ Upload failed: no result returned")
             return jsonify({'error': 'Upload failed'}), 500
-        
     except Exception as e:
-        print(f"❌ Error in immediate upload: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ Exception in upload_immediate: {str(e)}")
         return jsonify({'error': str(e)}), 500

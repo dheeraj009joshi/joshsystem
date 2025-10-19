@@ -46,9 +46,10 @@ from utils.logging_config import setup_logging, log_request_info, log_error, log
 login_manager = LoginManager()
 csrf = CSRFProtect()
 cache = Cache()
+# Initialize rate limiter with configurable limits
 limiter = Limiter(
     key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"]
+    default_limits=["1000 per day", "500 per hour"]  # Default limits
 )
 
 def create_app(config_name='default'):
@@ -138,9 +139,8 @@ def create_app(config_name='default'):
     # Initialize CSRF protection
     csrf.init_app(app)
     
-    # Initialize rate limiting
-    limiter.init_app(app)
-    
+    # Initialize rate limiting if enabled
+
     # Initialize caching if configured
     if app.config.get('CACHE_TYPE'):
         cache.init_app(app)
@@ -210,6 +210,27 @@ def create_app(config_name='default'):
                 'database': str(e),
                 'version': '1.0.0'
             }), 500
+
+    @app.route('/test-storage')
+    def test_storage():
+        """Test storage manager with debug info."""
+        from utils.storage_manager import StorageManager
+        
+        # Test the storage manager logic
+        study_id = "test-123"
+        study_title = "Test Study 2024"
+        category_name = "Test Category"
+        
+        # Test folder creation
+        study_dir = StorageManager.get_study_directory(study_id, study_title)
+        
+        return jsonify({
+            'study_id': study_id,
+            'study_title': study_title,
+            'category_name': category_name,
+            'study_directory': study_dir,
+            'message': 'Storage manager test completed'
+        })
     
     # Error handlers
     @app.errorhandler(404)
@@ -266,16 +287,6 @@ def create_app(config_name='default'):
         return '.' in filename and \
                filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
     
-    def save_uploaded_file(file, study_id):
-        """Save uploaded file and return file path."""
-        if file and allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            # Create unique filename
-            unique_filename = f"{study_id}_{uuid.uuid4().hex}_{filename}"
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
-            file.save(file_path)
-            return unique_filename
-        return None
     
     # Register template filters
     @app.template_filter('format_datetime')

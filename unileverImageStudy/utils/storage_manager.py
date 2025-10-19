@@ -13,25 +13,46 @@ class StorageManager:
     """Unified storage manager that handles both Azure and local storage based on configuration."""
     
     @staticmethod
-    def get_study_directory(study_id):
+    def get_study_directory(study_id, study_title=None):
         """Get study-specific directory path for local storage."""
+        print(f"🔍 STORAGE MANAGER DEBUG:")
+        print(f"   Study ID: '{study_id}'")
+        print(f"   Study Title: '{study_title}'")
+        
         # Check if this is a draft study (temporary)
         if study_id.startswith('draft_') or 'temp' in study_id.lower():
-            return os.path.join(
+            folder_path = os.path.join(
                 current_app.config['LOCAL_UPLOAD_FOLDER'], 
                 'drafts',
                 study_id  # Don't add 'draft_' prefix again
             )
+            print(f"   Using draft folder: {folder_path}")
+            return folder_path
         else:
-            return os.path.join(
+            # Create descriptive folder name using study title only
+            if study_title:
+                # Clean the title for folder name (remove special characters, replace spaces)
+                import re
+                clean_title = re.sub(r'[^\w\s-]', '', study_title)  # Remove special chars
+                clean_title = re.sub(r'[-\s]+', '_', clean_title)  # Replace spaces/dashes with underscores
+                clean_title = clean_title.strip('_').lower()  # Remove leading/trailing underscores, lowercase
+                folder_name = f"study_{clean_title}"
+                print(f"   Cleaned title: '{clean_title}' -> folder_name: '{folder_name}'")
+            else:
+                folder_name = f"study_{study_id}"
+                print(f"   No study title, using study_id: '{folder_name}'")
+            
+            folder_path = os.path.join(
                 current_app.config['LOCAL_UPLOAD_FOLDER'], 
-                f"study_{study_id}"
+                folder_name
             )
+            print(f"   Final folder path: {folder_path}")
+            return folder_path
     
     @staticmethod
-    def create_study_directory(study_id):
+    def create_study_directory(study_id, study_title=None):
         """Create study-specific directory for local storage."""
-        study_dir = StorageManager.get_study_directory(study_id)
+        study_dir = StorageManager.get_study_directory(study_id, study_title)
         os.makedirs(study_dir, exist_ok=True)
         
         # Create subdirectories for organization
@@ -40,10 +61,16 @@ class StorageManager:
             subdir_path = os.path.join(study_dir, subdir)
             os.makedirs(subdir_path, exist_ok=True)
         
+        # Create additional organized subdirectories
+        additional_subdirs = ['categories', 'elements', 'backgrounds']
+        for subdir in additional_subdirs:
+            subdir_path = os.path.join(study_dir, subdir)
+            os.makedirs(subdir_path, exist_ok=True)
+        
         return study_dir
     
     @staticmethod
-    def upload_file(file, study_id, filename=None, subdirectory=None):
+    def upload_file(file, study_id, filename=None, subdirectory=None, study_title=None, category_name=None, layer_name=None):
         """
         Upload file using configured storage method.
         
@@ -52,6 +79,9 @@ class StorageManager:
             study_id: Study ID for organizing files
             filename: Optional custom filename
             subdirectory: Optional subdirectory (grid_categories, layers, default_background)
+            study_title: Optional study title for descriptive folder naming
+            category_name: Optional category name for creating category subfolders
+            layer_name: Optional layer name for creating layer subfolders
         
         Returns:
             dict: Contains 'file_path' and 'url' keys
@@ -69,50 +99,91 @@ class StorageManager:
             return None
         
         if current_app.config.get('USE_LOCAL_STORAGE', False):
-            return StorageManager._upload_local(file, study_id, filename, subdirectory)
+            return StorageManager._upload_local(file, study_id, filename, subdirectory, study_title, category_name, layer_name)
         else:
             return StorageManager._upload_azure(file)
     
     @staticmethod
-    def _upload_local(file, study_id, filename=None, subdirectory=None):
+    def _upload_local(file, study_id, filename=None, subdirectory=None, study_title=None, category_name=None, layer_name=None):
         """Upload file to local storage."""
-        study_dir = StorageManager.create_study_directory(study_id)
+        study_dir = StorageManager.create_study_directory(study_id, study_title)
         
         # Determine target directory
         if subdirectory:
             target_dir = os.path.join(study_dir, subdirectory)
+            
+            # For grid_categories, create category-specific subfolder
+            if subdirectory == 'grid_categories':
+                import re
+                resolved_category = category_name or 'uncategorized'
+                clean_category_name = re.sub(r'[^\w\s-]', '', resolved_category)
+                clean_category_name = re.sub(r'[-\s]+', '_', clean_category_name)
+                clean_category_name = clean_category_name.strip('_').lower()
+                target_dir = os.path.join(target_dir, clean_category_name)
+            
+            # For layers, create layer-specific subfolder
+            elif subdirectory == 'layers' and layer_name:
+                import re
+                clean_layer_name = re.sub(r'[^\w\s-]', '', layer_name)
+                clean_layer_name = re.sub(r'[-\s]+', '_', clean_layer_name)
+                clean_layer_name = clean_layer_name.strip('_').lower()
+                target_dir = os.path.join(target_dir, clean_layer_name)
+            
             os.makedirs(target_dir, exist_ok=True)
         else:
             target_dir = study_dir
         
-        # Generate filename
+        # Generate filename - use exact original name without UUID prefix
         if not filename:
-            original_filename = secure_filename(file.filename)
-            # Add unique prefix to avoid conflicts
-            unique_filename = f"{uuid.uuid4().hex}_{original_filename}"
+            original_filename = secure_filename(getattr(file, 'filename', 'uploaded_file'))
+            unique_filename = original_filename
         else:
             unique_filename = filename
             
         file_path = os.path.join(target_dir, unique_filename)
         
-        # Handle different file types
-        if hasattr(file, 'save'):
-            # Regular file object (Flask FileStorage)
-            file.save(file_path)
-        else:
-            # BytesIO or similar object - write content to file
-            with open(file_path, 'wb') as f:
-                f.write(file.getvalue())
+        # Save file content
+        try:
+            if hasattr(file, 'save'):
+                file.save(file_path)
+            else:
+                # BytesIO-like
+                with open(file_path, 'wb') as f:
+                    f.write(file.getvalue())
+        except Exception as e:
+            current_app.logger.error(f"Failed to save file locally: {e}")
+            raise
         
         # Return relative path for database storage
-        # For drafts, use the actual directory structure
         if study_id.startswith('draft_') or 'temp' in study_id.lower():
             relative_path = f"drafts/{study_id}"
         else:
-            relative_path = f"study_{study_id}"
+            if study_title:
+                import re
+                clean_title = re.sub(r'[^\w\s-]', '', study_title)
+                clean_title = re.sub(r'[-\s]+', '_', clean_title)
+                clean_title = clean_title.strip('_').lower()
+                folder_name = f"study_{clean_title}"
+            else:
+                folder_name = f"study_{study_id}"
+            relative_path = folder_name
         
         if subdirectory:
             relative_path += f"/{subdirectory}"
+            if subdirectory == 'grid_categories':
+                import re
+                resolved_category = category_name or 'uncategorized'
+                clean_category_name = re.sub(r'[^\w\s-]', '', resolved_category)
+                clean_category_name = re.sub(r'[-\s]+', '_', clean_category_name)
+                clean_category_name = clean_category_name.strip('_').lower()
+                relative_path += f"/{clean_category_name}"
+            elif subdirectory == 'layers' and layer_name:
+                import re
+                clean_layer_name = re.sub(r'[^\w\s-]', '', layer_name)
+                clean_layer_name = re.sub(r'[-\s]+', '_', clean_layer_name)
+                clean_layer_name = clean_layer_name.strip('_').lower()
+                relative_path += f"/{clean_layer_name}"
+        
         relative_path += f"/{unique_filename}"
         
         return {
@@ -134,7 +205,7 @@ class StorageManager:
         return None
     
     @staticmethod
-    def upload_multiple_files(files, study_id, subdirectory=None):
+    def upload_multiple_files(files, study_id, subdirectory=None, study_title=None, category_name=None, layer_name=None):
         """Upload multiple files with parallel processing when using Azure."""
         if not files:
             return []
@@ -143,7 +214,7 @@ class StorageManager:
             # Sequential local upload (already fast)
             results = []
             for file in files:
-                result = StorageManager.upload_file(file, study_id, subdirectory=subdirectory)
+                result = StorageManager.upload_file(file, study_id, subdirectory=subdirectory, study_title=study_title, category_name=category_name, layer_name=layer_name)
                 results.append(result)
             return results
         else:
@@ -155,7 +226,7 @@ class StorageManager:
             
             def upload_single_file(file_with_index):
                 file, index = file_with_index
-                result = StorageManager.upload_file(file, study_id, subdirectory=subdirectory)
+                result = StorageManager.upload_file(file, study_id, subdirectory=subdirectory, study_title=study_title, category_name=category_name, layer_name=layer_name)
                 return index, result
             
             # Use ThreadPoolExecutor for parallel uploads
@@ -205,13 +276,13 @@ class StorageManager:
                     print(f"❌ Error deleting local files for study {study_id}: {e}")
     
     @staticmethod
-    def move_draft_to_study(draft_id, final_study_id):
+    def move_draft_to_study(draft_id, final_study_id, study_title=None):
         """Move files from draft folder to final study folder."""
         if not current_app.config.get('USE_LOCAL_STORAGE', False):
             return False
         
         draft_dir = StorageManager.get_study_directory(draft_id)
-        final_dir = StorageManager.get_study_directory(final_study_id)
+        final_dir = StorageManager.get_study_directory(final_study_id, study_title)
         
         if not os.path.exists(draft_dir):
             return True  # No draft files to move
@@ -271,40 +342,62 @@ class StorageManager:
             print(f"❌ Error cleaning up drafts: {e}")
             return 0
     
-    @staticmethod
-    def upload_multiple_files(files, study_id, subdirectory=None):
-        """Upload multiple files using configured storage method."""
-        if current_app.config.get('USE_LOCAL_STORAGE', False):
-            return StorageManager._upload_multiple_local(files, study_id, subdirectory)
-        else:
-            return upload_multiple_files_to_azure(files)
     
     @staticmethod
-    def _upload_multiple_local(files, study_id, subdirectory=None):
+    def _upload_multiple_local(files, study_id, subdirectory=None, study_title=None, category_name=None):
         """Upload multiple files to local storage."""
         results = []
-        study_dir = StorageManager.create_study_directory(study_id)
+        study_dir = StorageManager.create_study_directory(study_id, study_title)
         
         # Determine target directory
         if subdirectory:
             target_dir = os.path.join(study_dir, subdirectory)
+            
+            # For grid_categories, create category-specific subfolder
+            if subdirectory == 'grid_categories' and category_name:
+                # Clean category name for folder naming
+                import re
+                clean_category_name = re.sub(r'[^\w\s-]', '', category_name)
+                clean_category_name = re.sub(r'[-\s]+', '_', clean_category_name)
+                clean_category_name = clean_category_name.strip('_').lower()
+                
+                target_dir = os.path.join(target_dir, clean_category_name)
+            
             os.makedirs(target_dir, exist_ok=True)
         else:
             target_dir = study_dir
         
         for file in files:
             if file and file.filename and is_valid_image_file(file.filename):
-                # Generate unique filename
+                # Use exact original filename
                 original_filename = secure_filename(file.filename)
-                unique_filename = f"{uuid.uuid4().hex}_{original_filename}"
+                unique_filename = original_filename
                 
                 file_path = os.path.join(target_dir, unique_filename)
                 file.save(file_path)
                 
                 # Return relative path for database storage
-                relative_path = f"study_{study_id}"
+                # Use the same folder naming logic as get_study_directory
+                if study_title:
+                    import re
+                    clean_title = re.sub(r'[^\w\s-]', '', study_title)
+                    clean_title = re.sub(r'[-\s]+', '_', clean_title)
+                    clean_title = clean_title.strip('_').lower()
+                    folder_name = f"study_{clean_title}"
+                else:
+                    folder_name = f"study_{study_id}"
+                relative_path = folder_name
                 if subdirectory:
                     relative_path += f"/{subdirectory}"
+                    
+                    # For grid_categories, include category subfolder
+                    if subdirectory == 'grid_categories' and category_name:
+                        import re
+                        clean_category_name = re.sub(r'[^\w\s-]', '', category_name)
+                        clean_category_name = re.sub(r'[-\s]+', '_', clean_category_name)
+                        clean_category_name = clean_category_name.strip('_').lower()
+                        relative_path += f"/{clean_category_name}"
+                
                 relative_path += f"/{unique_filename}"
                 
                 results.append({

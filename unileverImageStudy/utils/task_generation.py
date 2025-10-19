@@ -8,7 +8,7 @@ class TaskGenerationClient:
     Client for interacting with the Task Generation API
     """
     
-    def __init__(self, base_url: str = "http://localhost:55001", timeout: int = 300):
+    def __init__(self, base_url: str = "http://20.84.154.103:55001", timeout: int = 300):
         self.base_url = base_url.rstrip('/')
         self.timeout = timeout
         self.session = requests.Session()
