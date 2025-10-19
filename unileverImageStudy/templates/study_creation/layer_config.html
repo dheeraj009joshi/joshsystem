@@ -78,7 +78,7 @@
                         <div class="upload-prompt" id="backgroundUploadPrompt">
                             <span class="upload-icon">📁</span>
                             <p>Drag & drop background image here or <button type="button" class="btn btn--sm btn--outline" onclick="triggerBackgroundFileInput()">Browse File</button></p>
-                            <small>Supports JPG, PNG, GIF, WebP formats</small>
+                            <small>Supports JPG, PNG, GIF formats</small>
                         </div>
                         <input type="file" id="backgroundFileInput" accept="image/*" style="display: none;">
                     </div>
@@ -333,7 +333,7 @@ window.saveLayer = function() {
         return;
     }
     
-    // Images will be uploaded to Azure when the form is submitted
+    // Images will be uploaded to storage when the form is submitted
     // For now, just validate that images exist
     
     if (currentEditingLayer) {
@@ -798,7 +798,7 @@ function addImageToModal(file) {
             alt: file.name.replace(/\.[^/.]+$/, ""),
             file: file, // Keep the file object for later upload
             dataUrl: e.target.result, // Use data URL for immediate preview
-            url: null, // Will be set after Azure upload
+            url: null, // Will be set after storage upload
             isUploading: false // Not uploading yet
         };
         
@@ -818,9 +818,9 @@ function addImageToModal(file) {
     reader.readAsDataURL(file);
 }
 
-// 🚀 ULTRA-FAST multiprocessing upload function (replaces old individual upload)
+// Upload function for layer images
 function uploadLayerImagesWithMultiprocessing(imagesToUpload) {
-    console.log('🚀 Starting multiprocessing upload for', imagesToUpload.length, 'images');
+    console.log('📤 Starting upload for', imagesToUpload.length, 'images');
     
     return fetch('/study/create/upload-layer-images', {
         method: 'POST',
@@ -888,7 +888,7 @@ function renderModalImages(images) {
         const imageAlt = image.alt || imageName;
         const imageUrl = image.url || image.dataUrl || '';
         
-        // Show image (either data URL for preview or Azure URL if available)
+        // Show image (either data URL for preview or storage URL if available)
         const imageContent = `<img src="${imageUrl}" alt="${imageAlt}" onerror="console.error('Failed to load image:', this.src)">`;
         
         imageItem.innerHTML = `
@@ -1522,8 +1522,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log(pair[0] + ': ' + pair[1]);
             }
             
-            // 🚀 ULTRA-FAST batch upload using multiprocessing
-            console.log('🚀 Starting ULTRA-FAST batch upload for all layer images...');
+            // Batch upload for layer images
+            console.log('📤 Starting batch upload for all layer images...');
             console.log('Layers array before upload:', layers);
             console.log('Layers length before upload:', layers.length);
             
@@ -1548,12 +1548,12 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             
             if (imagesToUpload.length > 0) {
-                console.log(`🚀 Starting ULTRA-FAST batch upload of ${imagesToUpload.length} layer images using multiprocessing`);
+                console.log(`📤 Starting batch upload of ${imagesToUpload.length} layer images`);
                 
                 // Show loading overlay with custom message
-                showLayerLoading('🚀 Uploading images to Azure using multiprocessing...', true);
+                showLayerLoading('📤 Uploading images to storage...', true);
                 
-                // Batch upload all images using multiprocessing
+                // Batch upload all images
                 fetch('/study/create/upload-layer-images', {
                     method: 'POST',
                     headers: {
@@ -1565,7 +1565,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        console.log('🎯 All layer images uploaded successfully using multiprocessing!');
+                        console.log('✅ All layer images uploaded successfully!');
                         console.log('Upload results:', data.results);
                         
                         // Update image URLs in layers
@@ -1577,7 +1577,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                     const imageIndex = layer.images.findIndex(img => img.id === imageId);
                                     if (imageIndex !== -1) {
                                         layer.images[imageIndex].url = result.url;
-                                        console.log(`Updated image ${imageId} with Azure URL: ${result.url}`);
+                                        console.log(`Updated image ${imageId} with storage URL: ${result.url}`);
                                     }
                                 });
                             } else {
@@ -1588,8 +1588,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         // Hide loading and show success
                         showLayerLoading('✅ Images uploaded! Now saving layer configuration...', false);
                         
-                        // Now submit the form with Azure URLs
-                        submitFormWithAzureUrls();
+                        // Now submit the form with storage URLs
+                        submitFormWithStorageUrls();
                     } else {
                         throw new Error(data.error || 'Upload failed');
                     }
@@ -1601,11 +1601,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             } else {
                 // No images to upload, submit form directly
-                submitFormWithAzureUrls();
+                submitFormWithStorageUrls();
             }
             
-            function submitFormWithAzureUrls() {
-                // Create new FormData with Azure URLs
+            function submitFormWithStorageUrls() {
+                // Create new FormData with storage URLs
                 const finalFormData = new FormData();
                 
                 layers.forEach((layer, index) => {
@@ -1619,12 +1619,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Log the actual value being appended
                     console.log(`  - Z-index value appended: ${layer.z_index !== undefined ? layer.z_index : index}`);
                     
-                    // Use Azure URLs instead of data URLs
+                    // Use storage URLs instead of data URLs
                     const imagesWithUrls = layer.images.map(img => ({
                         id: img.id,
                         name: img.name,
                         alt: img.alt,
-                        url: img.url || img.dataUrl // Use Azure URL if available, fallback to data URL
+                        url: img.url || img.dataUrl // Use storage URL if available, fallback to data URL
                     }));
                     
                     const imagesData = JSON.stringify(imagesWithUrls);
@@ -1651,7 +1651,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const csrfToken = document.querySelector('input[name="csrf_token"]').value;
                 finalFormData.append('csrf_token', csrfToken);
                 
-                console.log('Submitting form with Azure URLs...');
+                console.log('Submitting form with storage URLs...');
                 
                 // Submit the form
                 fetch(window.location.href, {

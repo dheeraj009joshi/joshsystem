@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_required, current_user
 from models.study import Study
 from models.response import StudyResponse, TaskSession
+from utils.storage_manager import StorageManager
 from datetime import datetime, timedelta
 import json
 import csv
@@ -1907,6 +1908,10 @@ def delete_study(study_id):
         # Delete associated responses and task sessions
         StudyResponse.objects(study=study).delete()
         TaskSession.objects(study_response__study=study).delete()
+        
+        # Delete local files if using local storage
+        if current_app.config.get('USE_LOCAL_STORAGE', False):
+            StorageManager.delete_study_files(study_id)
         
         # Remove from user's studies list
         current_user.studies.remove(study)

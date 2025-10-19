@@ -1,44 +1,84 @@
+# =============================================================================
+# MINDSURVE - IPED RESEARCH STUDY PLATFORM
+# Production Requirements
+# =============================================================================
+
+# Core Flask Framework
+Flask==2.3.3
+Werkzeug==2.3.7
+Jinja2==3.1.6
+MarkupSafe==3.0.2
+itsdangerous==2.2.0
+click==8.2.1
+blinker==1.9.0
+
+# Authentication & Security
+Flask-Login==0.6.3
+Flask-WTF==1.1.1
+WTForms==3.0.1
+bcrypt==4.0.1
+cryptography==45.0.6
+email-validator==2.0.0
+
+# Database
+mongoengine==0.27.0
+pymongo==4.5.0
+flask-mongoengine==1.0.0
+
+# Storage & File Handling
 azure-core==1.35.0
 azure-storage-blob==12.19.0
-bcrypt==4.0.1
-blinker==1.9.0
-Brotli==1.1.0
-cachelib==0.13.0
-certifi==2025.8.3
-cffi==1.17.1
-charset-normalizer==3.4.3
-click==8.2.1
-cryptography==45.0.6
-dnspython==2.7.0
-email-validator==2.0.0
-Flask==2.3.3
+Pillow==11.3.0
+
+# Caching & Performance
 Flask-Caching==2.3.1
+cachelib==0.13.0
 Flask-Compress==1.14
-Flask-Login==0.6.3
-flask-mongoengine==1.0.0
-Flask-WTF==1.1.1
-gunicorn==21.2.0
-idna==3.10
-isodate==0.7.2
-itsdangerous==2.2.0
-Jinja2==3.1.6
-load-dotenv==0.1.0
-MarkupSafe==3.0.2
-mongoengine==0.27.0
+
+# Rate Limiting & Security
+Flask-Limiter==3.5.0
+
+# Data Processing
 numpy==2.3.2
-packaging==25.0
 pandas==2.3.2
-pillow==11.3.0
-pycparser==2.22
-pymongo==4.5.0
-python-dateutil==2.9.0.post0
-python-dotenv==1.0.0
-pytz==2025.2
-pyzstd==0.17.0
+
+# HTTP & Networking
 requests==2.32.4
+urllib3==2.5.0
+certifi==2025.8.3
+charset-normalizer==3.4.3
+idna==3.10
+dnspython==2.7.0
+
+# Date & Time
+python-dateutil==2.9.0.post0
+pytz==2025.2
+tzdata==2025.2
+isodate==0.7.2
+
+# Compression
+Brotli==1.1.0
+pyzstd==0.17.0
+
+# Environment & Configuration
+python-dotenv==1.0.0
+load-dotenv==0.1.0
+
+# Production Server
+gunicorn==21.2.0
+
+# Development & Testing (optional)
+# pytest==7.4.0
+# pytest-flask==1.2.0
+# pytest-cov==4.1.0
+
+# Monitoring & Logging (optional)
+# sentry-sdk[flask]==1.32.0
+# prometheus-flask-exporter==0.23.0
+
+# Additional Utilities
+packaging==25.0
 six==1.17.0
 typing_extensions==4.14.1
-tzdata==2025.2
-urllib3==2.5.0
-Werkzeug==2.3.7
-WTForms==3.0.1
+cffi==1.17.1
+pycparser==2.22

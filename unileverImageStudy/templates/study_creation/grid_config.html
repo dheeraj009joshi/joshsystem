@@ -15,6 +15,9 @@
         <form method="POST" class="study-form" enctype="multipart/form-data" id="gridConfigForm">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             
+            <!-- Hidden field for draft ID -->
+            <input type="hidden" name="draft_id" id="draft_id" value="{{ draft.id }}">
+            
             <div class="form-section">
                 <div class="section-header">
                     <h3>Categories Configuration</h3>
@@ -847,6 +850,15 @@ async function uploadFileToAzure(file) {
         formData.append('immediate_upload', 'true'); // Flag to indicate immediate upload
         formData.append('csrf_token', document.querySelector('[name="csrf_token"]').value);
         
+        // Get the draft ID from the form
+        const draftId = document.getElementById('draft_id')?.value;
+        if (draftId) {
+            formData.append('study_id', draftId);
+            console.log('Using existing draft ID:', draftId);
+        } else {
+            console.warn('No draft ID found, will create new one');
+        }
+        
         const response = await fetch('/study/create/upload-immediate', {
             method: 'POST',
             body: formData
@@ -857,6 +869,8 @@ async function uploadFileToAzure(file) {
         if (response.ok) {
             const result = await response.json();
             console.log('Upload successful:', result);
+            console.log('Generated URL:', result.url);
+            console.log('File path:', result.file_path);
             return result.url;
         } else {
             const errorText = await response.text();
@@ -989,7 +1003,11 @@ document.getElementById('elementFiles').addEventListener('change', async functio
                 // Update the preview with the Azure URL
                 const img = fileItem.querySelector('.file-preview');
                 if (img) {
+                    console.log(`🖼️ Updating image source for ${file.name}: ${azureUrl}`);
                     img.src = azureUrl;
+                    console.log(`🖼️ Image source updated to: ${img.src}`);
+                } else {
+                    console.error(`❌ No .file-preview element found for ${file.name}`);
                 }
                 // Update the status text
                 const statusText = fileItem.querySelector('.file-size');
@@ -1096,10 +1114,34 @@ document.getElementById('gridConfigForm').addEventListener('submit', function(e)
         })
     }));
     
-    // Validate that all elements have proper Azure URLs
-    // Check for elements that have neither Azure URLs nor data URLs (truly invalid)
+    // Validate that all elements have proper URLs (Azure or local storage)
+    // Check for elements that have neither valid URLs nor data URLs (truly invalid)
     const elementsWithInvalidUrls = cleanedCategories.flatMap(cat => 
-        cat.elements.filter(el => !el.content || (el.content !== 'null' && el.content !== '' && !el.content.startsWith('data:') && !el.content.startsWith('http')))
+        cat.elements.filter(el => {
+            if (!el.content || el.content === 'null' || el.content === '') {
+                return true; // Invalid - no content
+            }
+            
+            // Valid if it's a data URL (base64 encoded image)
+            if (el.content.startsWith('data:')) {
+                return false; // Valid
+            }
+            
+            // Valid if it's an HTTP/HTTPS URL (Azure storage)
+            if (el.content.startsWith('http://') || el.content.startsWith('https://')) {
+                return false; // Valid
+            }
+            
+            // Valid if it's a local file path (local storage)
+            // Local paths typically look like: study_123/grid_categories/filename.jpg
+            if (el.content.includes('/') && (el.content.endsWith('.jpg') || el.content.endsWith('.jpeg') || 
+                el.content.endsWith('.png') || el.content.endsWith('.gif') || el.content.endsWith('.webp'))) {
+                return false; // Valid local file path
+            }
+            
+            // Invalid - doesn't match any valid pattern
+            return true;
+        })
     );
     
     if (elementsWithInvalidUrls.length > 0) {

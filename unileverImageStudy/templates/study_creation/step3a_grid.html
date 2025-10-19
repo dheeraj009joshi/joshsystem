@@ -100,7 +100,7 @@
                                                         {% for element_name, element_data in task.elements_shown_content.items() %}
                                                             {% if element_data and task.elements_shown.get(element_name, 0) == 1 %}
                                                                 {% set image_url = element_data.content or element_data.url %}
-                                                                {% if image_url and (image_url.startswith('http') or image_url.startswith('data:image')) %}
+                                                                {% if image_url and (image_url.startswith('http') or image_url.startswith('data:image') or ('/' in image_url and (image_url.endswith('.jpg') or image_url.endswith('.jpeg') or image_url.endswith('.png') or image_url.endswith('.gif') or image_url.endswith('.webp')))) %}
                                                                     {% set has_content = true %}
                                                                     <div class="image-container" style="display: flex;">
                                                                         <img src="{{ image_url }}" 
@@ -118,7 +118,7 @@
                                                             {% if is_active and not element_name.endswith('_content') and not element_name.endswith('_ref') %}
                                                                 {% set content_key = element_name + '_content' %}
                                                                 {% set image_url = task.elements_shown.get(content_key, '') %}
-                                                                {% if image_url and (image_url.startswith('http') or image_url.startswith('data:image')) %}
+                                                                {% if image_url and (image_url.startswith('http') or image_url.startswith('data:image') or ('/' in image_url and (image_url.endswith('.jpg') or image_url.endswith('.jpeg') or image_url.endswith('.png') or image_url.endswith('.gif') or image_url.endswith('.webp')))) %}
                                                                     {% set has_content = true %}
                                                                     <div class="image-container" style="display: flex;">
                                                                         <img src="{{ image_url }}" 

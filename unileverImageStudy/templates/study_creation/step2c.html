@@ -216,10 +216,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 tasksPerConsumer = backendCalculatedTasks;
                 console.log('Using backend-calculated tasks per consumer:', tasksPerConsumer);
             } else {
-                // Fallback to simple calculation
+                // Fallback to simple calculation with dynamic cap
                 const maxTasksPerConsumer = calculateCombination(numElements, K);
-                tasksPerConsumer = Math.min(24, Math.floor(maxTasksPerConsumer / 2));
-                console.log('Using fallback calculation:', tasksPerConsumer);
+                
+                // Dynamic cap based on study size (matching backend logic)
+                let maxCap;
+                if (numElements <= 16) {
+                    maxCap = 24;  // Small studies: cap at 24
+                } else if (numElements <= 32) {
+                    maxCap = 48;  // Medium studies: cap at 48
+                } else if (numElements <= 64) {
+                    maxCap = 96;  // Large studies: cap at 96
+                } else {
+                    maxCap = 120; // Very large studies: cap at 120
+                }
+                
+                tasksPerConsumer = Math.min(maxCap, Math.max(1, Math.floor(maxTasksPerConsumer / 2)));
+                console.log('Using fallback calculation with dynamic cap:', tasksPerConsumer);
             }
             
             // Calculate total tasks

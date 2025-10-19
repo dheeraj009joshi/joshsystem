@@ -1,6 +1,7 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify, current_app
 from models.study import Study
 from models.response import StudyResponse
+from utils.storage_manager import StorageManager
 from datetime import datetime, timezone, timedelta
 import uuid
 import json
@@ -41,9 +42,16 @@ def serialize_study_for_preloading(study):
                     # For grid studies, the image URL is in the 'content' field
                     if hasattr(element, 'content') and element.content:
                         try:
-                            # content field contains the file path/URL
+                            # Get proper URL based on storage configuration
+                            if current_app.config.get('USE_LOCAL_STORAGE', False):
+                                # Local storage - content is file path, need to get URL
+                                image_url = StorageManager.get_file_url(str(element.content), study._id)
+                            else:
+                                # Azure storage - content is already URL
+                                image_url = str(element.content)
+                            
                             element_data['image'] = {
-                                'url': str(element.content),
+                                'url': image_url,
                                 'filename': str(getattr(element, 'name', ''))
                             }
                         except Exception as img_error:
@@ -69,9 +77,17 @@ def serialize_study_for_preloading(study):
                     if hasattr(layer, 'images') and layer.images:
                         for image in layer.images:
                             try:
+                                # Get proper URL based on storage configuration
+                                if current_app.config.get('USE_LOCAL_STORAGE', False):
+                                    # Local storage - url field contains file path, need to get URL
+                                    image_url = StorageManager.get_file_url(str(getattr(image, 'url', '')), study._id)
+                                else:
+                                    # Azure storage - url field is already URL
+                                    image_url = str(getattr(image, 'url', ''))
+                                
                                 image_data = {
                                     'name': str(getattr(image, 'name', '')),
-                                    'url': str(getattr(image, 'url', '')),
+                                    'url': image_url,
                                     'alt_text': str(getattr(image, 'alt_text', '')),
                                     'order': int(getattr(image, 'order', 0)),
                                     'image_id': str(getattr(image, 'image_id', '')) if hasattr(image, 'image_id') else None
@@ -112,8 +128,16 @@ def serialize_study_for_preloading(study):
                                 # For grid studies, the image URL is in the 'content' field
                                 if hasattr(element, 'content') and element.content:
                                     try:
+                                        # Get proper URL based on storage configuration
+                                        if current_app.config.get('USE_LOCAL_STORAGE', False):
+                                            # Local storage - content is file path, need to get URL
+                                            image_url = StorageManager.get_file_url(str(element.content), study._id)
+                                        else:
+                                            # Azure storage - content is already URL
+                                            image_url = str(element.content)
+                                        
                                         element_data['image'] = {
-                                            'url': str(element.content),
+                                            'url': image_url,
                                             'filename': str(getattr(element, 'name', ''))
                                         }
                                     except Exception as img_error:

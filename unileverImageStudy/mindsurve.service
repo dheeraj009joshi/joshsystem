@@ -1,0 +1,39 @@
+[Unit]
+Description=Mindsurve IPED Research Study Platform
+After=network.target mongod.service
+Wants=mongod.service
+
+[Service]
+Type=exec
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/mindsurve
+Environment=PATH=/opt/mindsurve/venv/bin
+Environment=FLASK_ENV=production
+Environment=FLASK_DEBUG=False
+ExecStart=/opt/mindsurve/venv/bin/python start_production.py
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mindsurve
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/mindsurve/logs /opt/mindsurve/local_uploads /opt/mindsurve/uploads
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+MemoryMax=2G
+CPUQuota=200%
+
+[Install]
+WantedBy=multi-user.target

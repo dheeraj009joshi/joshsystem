@@ -18,6 +18,7 @@ from models.study import Study
 from models.study_draft import StudyDraft
 from models.study_task import StudyPanelistTasks
 from models.response import StudyResponse
+from utils.storage_manager import StorageManager
 from config import config
 
 def cleanup_completed_studies():
@@ -120,6 +121,37 @@ def mark_inprogress_as_abandoned():
             
     except Exception as e:
         print(f"⚠️  Warning: Could not mark in-progress responses as abandoned: {e}")
+    
+    # Clean up old draft folders (if using local storage)
+    try:
+        print("\n🧹 Cleaning up old draft folders...")
+        cleaned_drafts = StorageManager.cleanup_old_drafts(max_age_hours=24)
+        if cleaned_drafts > 0:
+            print(f"✅ Cleaned up {cleaned_drafts} old draft folders")
+        else:
+            print("ℹ️  No old draft folders to clean up")
+    except Exception as e:
+        print(f"⚠️  Warning: Could not clean up draft folders: {e}")
+    
+    # Clean up any double-prefixed draft folders (legacy cleanup)
+    try:
+        print("\n🧹 Cleaning up double-prefixed draft folders...")
+        import os
+        import shutil
+        drafts_dir = os.path.join(os.getcwd(), 'local_uploads', 'drafts')
+        if os.path.exists(drafts_dir):
+            double_prefixed = [item for item in os.listdir(drafts_dir) 
+                             if os.path.isdir(os.path.join(drafts_dir, item)) and item.startswith('draft_draft_')]
+            if double_prefixed:
+                for folder in double_prefixed:
+                    folder_path = os.path.join(drafts_dir, folder)
+                    shutil.rmtree(folder_path)
+                    print(f"✅ Cleaned up double-prefixed folder: {folder}")
+                print(f"✅ Cleaned up {len(double_prefixed)} double-prefixed draft folders")
+            else:
+                print("ℹ️  No double-prefixed draft folders found")
+    except Exception as e:
+        print(f"⚠️  Warning: Could not clean up double-prefixed folders: {e}")
 
 if __name__ == "__main__":
     # Main cleanup: Remove panelist data for completed studies

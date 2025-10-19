@@ -1,14 +1,18 @@
 import os
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
+import logging
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash, send_file, abort, g
 from flask_login import LoginManager, current_user, login_user, logout_user, login_required
 from flask_wtf.csrf import CSRFProtect
 from flask_caching import Cache
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from mongoengine import connect
 from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
 import uuid
 from datetime import datetime
 import json
+import time
 
 # Import routes
 from routes.index import index_bp
@@ -35,54 +39,120 @@ from forms.study import (
     Step2cIPEDParametersForm, Step3aTaskGenerationForm, Step3bLaunchForm
 )
 
+# Import logging configuration
+from utils.logging_config import setup_logging, log_request_info, log_error, log_performance, log_security, log_study_event, log_user_action
+
 # Initialize extensions
 login_manager = LoginManager()
 csrf = CSRFProtect()
 cache = Cache()
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"]
+)
 
 def create_app(config_name='default'):
     """Application factory function."""
     app = Flask(__name__)
     app.config.from_object(config[config_name])
     
-    # Increase request size limits for large forms
-    app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200MB total request size
-    app.config['MAX_CONTENT_LENGTH_PER_FILE'] = 16 * 1024 * 1024  # 16MB per file
+    # Set up logging first
+    setup_logging(app)
+    logger = logging.getLogger('mindsurve')
     
-    # Ensure upload folder exists
+    # Security headers
+    @app.after_request
+    def set_security_headers(response):
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        return response
+    
+    # Request ID for tracking
+    @app.before_request
+    def before_request():
+        g.request_id = str(uuid.uuid4())[:8]
+        g.start_time = time.time()
+        log_request_info()
+    
+    # Performance logging
+    @app.after_request
+    def after_request(response):
+        if hasattr(g, 'start_time'):
+            duration = time.time() - g.start_time
+            log_performance(
+                operation=f"{request.method} {request.endpoint}",
+                duration=duration,
+                details={
+                    'status_code': response.status_code,
+                    'content_length': response.content_length
+                }
+            )
+        return response
+    
+    # Increase request size limits for large forms
+    max_content_length = app.config.get('MAX_CONTENT_LENGTH', 10 * 1024 * 1024)  # 10MB default
+    app.config['MAX_CONTENT_LENGTH'] = max_content_length
+    
+    # Ensure upload folders exist
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     
+    # Ensure local upload folder exists if using local storage
+    if app.config.get('USE_LOCAL_STORAGE', False)==True:
+        os.makedirs(app.config['LOCAL_UPLOAD_FOLDER'], exist_ok=True)
+        logger.info(f"Local storage enabled. Upload directory: {app.config['LOCAL_UPLOAD_FOLDER']}")
+    else:
+        logger.info("Azure storage enabled")
+    
     # Initialize extensions
-    # Connect to MongoDB with highly optimized settings for performance
-    connect(
-        host=app.config['MONGODB_SETTINGS']['host'],
-        maxPoolSize=50,  # Increased for better concurrency
-        minPoolSize=5,   # Increased minimum connections
-        maxIdleTimeMS=60000,  # Keep connections alive longer
-        serverSelectionTimeoutMS=2000,  # Faster server selection
-        connectTimeoutMS=2000,  # Faster connection
-        socketTimeoutMS=10000,  # Reasonable socket timeout
-        waitQueueTimeoutMS=2000,  # Faster queue timeout
-        maxConnecting=10,  # Limit concurrent connections
-        retryWrites=True,  # Enable retry for writes
-        retryReads=True,   # Enable retry for reads
-        w='majority',      # Write concern
-        readPreference='primaryPreferred'  # Read preference
-    )
+    try:
+        # Connect to MongoDB with highly optimized settings for performance
+        connect(
+            host=app.config['MONGODB_SETTINGS']['host'],
+            maxPoolSize=50,  # Increased for better concurrency
+            minPoolSize=5,   # Increased minimum connections
+            maxIdleTimeMS=60000,  # Keep connections alive longer
+            serverSelectionTimeoutMS=2000,  # Faster server selection
+            connectTimeoutMS=2000,  # Faster connection
+            socketTimeoutMS=10000,  # Reasonable socket timeout
+            waitQueueTimeoutMS=2000,  # Faster queue timeout
+            maxConnecting=10,  # Limit concurrent connections
+            retryWrites=True,  # Enable retry for writes
+            retryReads=True,   # Enable retry for reads
+            w='majority',      # Write concern
+            readPreference='primaryPreferred'  # Read preference
+        )
+        logger.info("MongoDB connection established successfully")
+    except Exception as e:
+        logger.error(f"Failed to connect to MongoDB: {e}")
+        raise
+    
+    # Initialize Flask-Login
     login_manager.init_app(app)
     login_manager.login_view = 'auth.login'
     login_manager.login_message = 'Please log in to access this page.'
+    login_manager.session_protection = 'strong'
     
     # Initialize CSRF protection
     csrf.init_app(app)
     
+    # Initialize rate limiting
+    limiter.init_app(app)
+    
+    # Initialize caching if configured
+    if app.config.get('CACHE_TYPE'):
+        cache.init_app(app)
+        logger.info(f"Cache initialized: {app.config.get('CACHE_TYPE')}")
+    
 
     
     # Configure session management for persistence
-    app.config['PERMANENT_SESSION_LIFETIME'] = 3600 * 24 * 30  # 30 days
-    app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
-    app.config['SESSION_COOKIE_HTTPONLY'] = True
-    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    app.config['PERMANENT_SESSION_LIFETIME'] = app.config.get('PERMANENT_SESSION_LIFETIME', 3600 * 24)  # 24 hours default
+    app.config['SESSION_COOKIE_SECURE'] = app.config.get('SESSION_COOKIE_SECURE', False)  # Set to True in production with HTTPS
+    app.config['SESSION_COOKIE_HTTPONLY'] = app.config.get('SESSION_COOKIE_HTTPONLY', True)
+    app.config['SESSION_COOKIE_SAMESITE'] = app.config.get('SESSION_COOKIE_SAMESITE', 'Lax')
     
 
     app.register_blueprint(index_bp)
@@ -103,8 +173,12 @@ def create_app(config_name='default'):
     @login_manager.user_loader
     def load_user(user_id):
         try:
-            return User.objects(_id=user_id).first()
-        except:
+            user = User.objects(_id=user_id).first()
+            if user:
+                log_user_action('login_load', user_id)
+            return user
+        except Exception as e:
+            log_error(e, f"Failed to load user {user_id}")
             return None
     
     # Health check endpoint
@@ -117,18 +191,47 @@ def create_app(config_name='default'):
             db = get_db()
             # Use a lightweight command instead of ping
             db.command('ismaster', maxTimeMS=1000)
-            return jsonify({'status': 'healthy', 'database': 'connected'}), 200
+            
+            health_status = {
+                'status': 'healthy',
+                'timestamp': datetime.utcnow().isoformat(),
+                'database': 'connected',
+                'storage': 'azure' if not app.config.get('USE_LOCAL_STORAGE', False) else 'local',
+                'version': '1.0.0'
+            }
+            
+            logger.info("Health check passed")
+            return jsonify(health_status), 200
         except Exception as e:
-            return jsonify({'status': 'unhealthy', 'database': str(e)}), 500
+            logger.error(f"Health check failed: {e}")
+            return jsonify({
+                'status': 'unhealthy',
+                'timestamp': datetime.utcnow().isoformat(),
+                'database': str(e),
+                'version': '1.0.0'
+            }), 500
     
     # Error handlers
     @app.errorhandler(404)
     def not_found_error(error):
+        logger.warning(f"404 error: {request.url}")
         return render_template('errors/404.html'), 404
     
     @app.errorhandler(500)
     def internal_error(error):
+        log_error(error, f"500 error on {request.url}")
         return render_template('errors/500.html'), 500
+    
+    @app.errorhandler(413)
+    def too_large(error):
+        logger.warning(f"File too large: {request.url}")
+        flash('File too large. Please upload a smaller file.', 'error')
+        return redirect(request.url)
+    
+    @app.errorhandler(429)
+    def ratelimit_handler(e):
+        logger.warning(f"Rate limit exceeded: {request.remote_addr}")
+        return jsonify({'error': 'Rate limit exceeded. Please try again later.'}), 429
     
     # Main routes
     @app.route('/')
@@ -147,6 +250,15 @@ def create_app(config_name='default'):
     def contact():
         """Contact page."""
         return render_template('contact.html')
+    
+    @app.route('/static/uploads/<path:filename>')
+    def uploaded_file(filename):
+        """Serve uploaded files from local storage."""
+        if app.config.get('USE_LOCAL_STORAGE', False):
+            file_path = os.path.join(app.config['LOCAL_UPLOAD_FOLDER'], filename)
+            if os.path.exists(file_path):
+                return send_file(file_path)
+        return abort(404)
     
     # File upload helper
     def allowed_file(filename):

@@ -96,6 +96,54 @@ def upload_to_azure(file):
         current_app.logger.error(f"File attributes: {dir(file)}")
         return None
 
+def upload_to_azure_no_conversion(file):
+    """Upload file to Azure Blob Storage without WebP conversion"""
+    try:
+        # Get configuration from Flask app
+        connection_string = current_app.config.get('AZURE_STORAGE_CONNECTION_STRING')
+        container_name = current_app.config.get('AZURE_CONTAINER_NAME')
+        
+        if not connection_string or not container_name:
+            current_app.logger.error("Azure storage configuration missing")
+            return None
+        
+        # Create blob service client
+        blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+        
+        # Use original file without any conversion
+        file_to_upload = file
+        if hasattr(file, 'filename') and file.filename:
+            file_extension = os.path.splitext(file.filename)[1]
+        else:
+            file_extension = '.png'  # Default extension
+        
+        blob_name = f"{uuid.uuid4()}{file_extension}"
+        
+        # Get blob client
+        blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
+        
+        # Reset file pointer to beginning
+        file_to_upload.seek(0)
+        
+        # Read file content
+        file_content = file_to_upload.read()
+        
+        # Upload file content
+        blob_client.upload_blob(file_content, overwrite=True)
+        
+        # Return the public URL
+        account_name = connection_string.split(';')[1].split('=')[1]
+        url = f"https://{account_name}.blob.core.windows.net/{container_name}/{blob_name}"
+        
+        current_app.logger.info(f"File uploaded successfully to Azure (no conversion): {blob_name}")
+        return url
+        
+    except Exception as e:
+        current_app.logger.error(f"Azure upload (no conversion) failed: {str(e)}")
+        current_app.logger.error(f"File type: {type(file)}")
+        current_app.logger.error(f"File attributes: {dir(file)}")
+        return None
+
 def upload_single_file_to_azure_optimized(file_data: Tuple, container_name: str) -> Tuple[int, Optional[str], Optional[str]]:
     """
     Ultra-optimized single file upload with WebP optimization and maximum performance settings.

@@ -14,7 +14,8 @@ from forms.study import (
     Step2cIPEDParametersForm, Step3aTaskGenerationForm, Step3bLaunchForm,
     LayerConfigForm, LayerIPEDForm,GridConfigForm,GridIPEDForm
 )
-from utils.azure_storage import upload_to_azure, upload_multiple_files_to_azure, upload_layer_images_to_azure, is_valid_image_file, get_file_size_mb
+from utils.azure_storage import is_valid_image_file, get_file_size_mb
+from utils.storage_manager import StorageManager
 from utils.task_generation import TaskGenerationClient
 from models.study_task import StudyPanelistTasks
 import math
@@ -50,21 +51,19 @@ def get_study_draft():
     #print(f"⏱️  [PERF]get_study_draft() total: {total_duration:.3f}s")
     return draft
 
-def save_uploaded_file(file, study_id):
-    """Save uploaded file to Azure Blob Storage and return URL."""
+def save_uploaded_file(file, study_id, subdirectory=None):
+    """Save uploaded file using configured storage method and return URL."""
     if file and file.filename:
-        # Validate file type
-        if not is_valid_image_file(file.filename):
-            return None
-        
-        # Check file size (max 16MB)
-        file_size_mb = get_file_size_mb(file)
-        if file_size_mb > 16:
-            return None
-        
-        # Upload to Azure
-        azure_url = upload_to_azure(file)
-        return azure_url
+        # Use storage manager for unified handling
+        result = StorageManager.upload_file(file, study_id, subdirectory=subdirectory)
+        if result:
+            return result['url']  # Return URL for backward compatibility
+    return None
+
+def save_uploaded_file_with_details(file, study_id, subdirectory=None):
+    """Save uploaded file using configured storage method and return full details."""
+    if file and file.filename:
+        return StorageManager.upload_file(file, study_id, subdirectory=subdirectory)
     return None
 
 @study_creation_bp.route('/')
@@ -430,14 +429,14 @@ def step2a():
                         mime_type = header.split(':')[1].split(';')[0]
                         extension = mimetypes.guess_extension(mime_type) or '.png'
                         
-                        # Create a proper file-like object
+                        # Create a proper file-like object with filename attribute
                         image_file = io.BytesIO(image_data)
-                        image_file.name = f"element_{i+1}_converted{extension}"
+                        image_file.filename = f"element_{i+1}_converted{extension}"
                         
                         # Ensure the file pointer is at the beginning
                         image_file.seek(0)
                         
-                        files_to_upload.append((i, image_file, image_file.name))
+                        files_to_upload.append((i, image_file, image_file.filename))
                         element_data['_needs_upload'] = True
                     else:
                         # No new file, but existing Azure URL - keep the existing URL
@@ -459,36 +458,36 @@ def step2a():
             
             # Ultra-fast batch upload all files in parallel
             if files_to_upload:
-                print(f"🚀 Starting ULTRA-FAST batch upload of {len(files_to_upload)} files")
+                print(f"📤 Starting batch upload of {len(files_to_upload)} files")
                 upload_start_time = time.time()
                 
-                # Use optimized multiprocessing with more workers for speed
-                max_workers = min(current_app.config.get('AZURE_UPLOAD_MAX_WORKERS', 8), len(files_to_upload))
-                print(f"⚡ Using {max_workers} parallel workers for maximum speed")
-                
-                upload_results = upload_multiple_files_to_azure(files_to_upload, max_workers=max_workers)
-                
-                upload_duration = time.time() - upload_start_time
-                print(f"⚡ ULTRA-FAST upload completed in {upload_duration:.2f} seconds")
-                
-                # Performance validation
-                if upload_duration > 2.0:  # Should be under 2 seconds for 8 files
-                    print(f"⚠️  Upload took {upload_duration:.2f}s - investigating performance...")
-                else:
-                    print(f"🎯 Excellent performance! {upload_duration:.2f}s for {len(files_to_upload)} files")
-                
-                # Process upload results
-                for element_index, azure_url, error_msg in upload_results:
-                    if error_msg:
-                        flash(f'Upload failed for element {element_index + 1}: {error_msg}', 'error')
+                # Upload each file using storage manager
+                for element_index, file_obj, filename in files_to_upload:
+                    try:
+                        result = StorageManager.upload_file(
+                            file_obj, 
+                            draft.id, 
+                            filename=filename,
+                            subdirectory='grid_categories'
+                        )
+                        
+                        if result:
+                            elements_data[element_index]['content'] = result['url']
+                            elements_data[element_index]['_needs_upload'] = False
+                            print(f"✅ Successfully uploaded image for element {element_index + 1}: {result['url'][:50]}...")
+                        else:
+                            flash(f'Upload failed for element {element_index + 1}', 'error')
+                            return render_template('study_creation/step2a.html', 
+                                                study_type=study_type, num_elements=4, 
+                                                elements_data=elements_data, current_step='2a', draft=draft)
+                    except Exception as e:
+                        flash(f'Upload failed for element {element_index + 1}: {str(e)}', 'error')
                         return render_template('study_creation/step2a.html', 
                                             study_type=study_type, num_elements=4, 
                                             elements_data=elements_data, current_step='2a', draft=draft)
-                    
-                    # Update element data with Azure URL
-                    elements_data[element_index]['content'] = azure_url
-                    elements_data[element_index]['_needs_upload'] = False
-                    print(f"DEBUG: Successfully uploaded image for element {element_index + 1} to Azure: {azure_url}")
+                
+                upload_duration = time.time() - upload_start_time
+                print(f"📤 Batch upload completed in {upload_duration:.2f} seconds")
             else:
                 print("DEBUG: No new files to upload")
             
@@ -499,14 +498,29 @@ def step2a():
                                     study_type=study_type, num_elements=4, 
                                     elements_data=elements_data, current_step='2a', draft=draft)
             
-            # Validate that all elements have Azure URLs and clean up temporary fields
+            # Validate that all elements have valid URLs (Azure or local storage) and clean up temporary fields
             for elem in elements_data:
                 # Remove temporary upload tracking field
                 elem.pop('_needs_upload', None)
                 
-                # Ensure content is a valid Azure URL
-                if not elem.get('content', '').startswith('http'):
-                    flash(f'Element {elem.get("element_id", "Unknown")} does not have a valid Azure URL. Please try again.', 'error')
+                # Ensure content is a valid URL based on storage configuration
+                content = elem.get('content', '')
+                use_local_storage = current_app.config.get('USE_LOCAL_STORAGE', False)
+                
+                if use_local_storage:
+                    # For local storage, accept local file paths and base64 data URLs
+                    is_valid_url = (content.startswith('data:') or 
+                                   (content and '/' in content and not content.startswith('http') and 
+                                    (content.startswith('/static/uploads/') or not content.startswith('/')) and 
+                                    any(content.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp'])))
+                else:
+                    # For Azure storage, accept Azure URLs and base64 data URLs
+                    is_valid_url = (content.startswith('data:') or 
+                                   (content.startswith('http') and ('blob.core.windows.net' in content or 'azure' in content)))
+                
+                if not is_valid_url:
+                    storage_type = "local storage" if use_local_storage else "Azure storage"
+                    flash(f'Element {elem.get("element_id", "Unknown")} does not have a valid URL for {storage_type}. Please try again.', 'error')
                     return render_template('study_creation/step2a.html', 
                                         study_type=study_type, num_elements=4, 
                                         elements_data=elements_data, current_step='2a', draft=draft)
@@ -810,34 +824,16 @@ def step2c():
         if calculated_tasks and calculated_tasks.isdigit():
             tasks_per_consumer = int(calculated_tasks)
         else:
-            # Use advanced algorithm from latest grid task generation
-            if total_elements > 0 and category_info:
-                from utils.task_generation import plan_T_E_auto
-                
-                # Plan using the same algorithm as actual task generation
-                try:
-                    T, E, A_map, avg_k, A_min_used = plan_T_E_auto(
-                        category_info=category_info, 
-                        study_mode="grid", 
-                        max_active_per_row=min(4, len(category_info))  # GRID_MAX_ACTIVE = 4
-                    )
-                    tasks_per_consumer = T
-                    print(f"DEBUG: Advanced algorithm calculated tasks_per_consumer: {tasks_per_consumer}")
-                except Exception as e:
-                    print(f"DEBUG: Advanced algorithm failed ({e}), falling back to simple calculation")
-                    # Fallback to simple calculation
-                    if total_elements <= 8:
-                        K = 2
-                    elif total_elements <= 16:
-                        K = 3
-                    else:
-                        K = 4
-                    max_tasks = math.comb(total_elements, K) if total_elements >= K else 0
-                    tasks_per_consumer = min(24, max(1, math.floor(max_tasks / 2)))
-            else:
-                # No elements available, use default
-                tasks_per_consumer = 8
-                print(f"DEBUG: No elements available, using default tasks_per_consumer: {tasks_per_consumer}")
+            # Use unified task calculation
+            from utils.task_calculation import calculate_tasks_per_consumer
+            
+            tasks_per_consumer = calculate_tasks_per_consumer(
+                total_elements=total_elements,
+                category_info=category_info,
+                study_mode="grid",
+                use_advanced_algorithm=True
+            )
+            print(f"DEBUG: Unified calculation - tasks_per_consumer: {tasks_per_consumer}")
         
         # Grid study parameters
         step2c_data = {
@@ -888,7 +884,7 @@ def step2c():
         
         if total_elements > 0 and category_info:
             try:
-                from utils.task_generation import plan_T_E_auto
+                from utils.task_calculation import plan_T_E_auto
                 T, E, A_map, avg_k, A_min_used = plan_T_E_auto(
                     category_info=category_info, 
                     study_mode="grid", 
@@ -1480,6 +1476,10 @@ def step3b():
                 status='active'
             )
             
+            # Move files from draft folder to final study folder (if using local storage)
+            if current_app.config.get('USE_LOCAL_STORAGE', False):
+                StorageManager.move_draft_to_study(f"draft_{draft.id}", str(draft.id))
+            
             # Set rating scale
             step1c_data = draft.get_step_data('1c')
             study.rating_scale = RatingScale(
@@ -2035,23 +2035,23 @@ def layer_config():
                 flash('Please add at least one layer with images.', 'error')
                 return render_template('study_creation/layer_config.html', form=form, draft=draft)
             
-            # Extract all images that need to be uploaded to Azure
+            # Extract all images that need to be uploaded to storage
             images_to_upload = []
             processed_layers = []
             
-            # Check if all images already have Azure URLs (from frontend batch upload)
-            all_images_have_azure_urls = True
+            # Check if all images already have storage URLs (from frontend batch upload)
+            all_images_have_storage_urls = True
             for layer in layers_data:
                 for image in layer.get('images', []):
                     if image.get('url', '').startswith('data:image'):
-                        all_images_have_azure_urls = False
+                        all_images_have_storage_urls = False
                         break
-                if not all_images_have_azure_urls:
+                if not all_images_have_storage_urls:
                     break
             
-            print(f"🔍 All images have Azure URLs: {all_images_have_azure_urls}")
+            print(f"🔍 All images have storage URLs: {all_images_have_storage_urls}")
             
-            print(f"🚀 Starting ULTRA-FAST layer image processing for {len(layers_data)} layers")
+            print(f"📤 Starting layer image processing for {len(layers_data)} layers")
             image_processing_start = time.time()
             
             for layer in layers_data:
@@ -2070,11 +2070,11 @@ def layer_config():
                         print(f"⚠️ Skipping invalid image data: {image}")
                         continue
                     
-                    # Check if this image needs to be uploaded to Azure
+                    # Check if this image needs to be uploaded to storage
                     print(f"🔍 Checking image URL: {image['url'][:50]}...")
-                    if not all_images_have_azure_urls and image['url'].startswith('data:image'):
-                        # This is a base64 image that needs Azure upload
-                        print(f"⚡ Queuing base64 image for Azure upload: {image['name']}")
+                    if not all_images_have_storage_urls and image['url'].startswith('data:image'):
+                        # This is a base64 image that needs storage upload
+                        print(f"📤 Queuing base64 image for storage upload: {image['name']}")
                         
                         # Extract base64 data and determine file type
                         header, encoded = image['url'].split(",", 1)
@@ -2084,16 +2084,16 @@ def layer_config():
                         mime_type = header.split(':')[1].split(';')[0]
                         extension = mimetypes.guess_extension(mime_type) or '.png'
                         
-                        # Create a proper file-like object
+                        # Create a proper file-like object with filename attribute
                         image_file = io.BytesIO(image_data)
-                        image_file.name = f"{image['id']}{extension}"
+                        image_file.filename = f"{image['id']}{extension}"
                         image_file.seek(0)
                         
                         # Add to upload queue with metadata
                         images_to_upload.append({
                             'image_id': image['id'],
                             'file': image_file,
-                            'filename': image_file.name,
+                            'filename': image_file.filename,
                             'layer_id': layer['layer_id'],
                             'image_index': len(processed_images)
                         })
@@ -2101,8 +2101,8 @@ def layer_config():
                         # Mark this image as needing upload
                         image['_needs_upload'] = True
                     else:
-                        # This is already an Azure URL (from batch upload), keep it
-                        print(f"⚡ Using existing Azure URL for image: {image['name']}")
+                        # This is already a storage URL (from batch upload), keep it
+                        print(f"✅ Using existing storage URL for image: {image['name']}")
                         image['_needs_upload'] = False
                     
                     processed_images.append(image)
@@ -2114,77 +2114,67 @@ def layer_config():
             image_processing_duration = time.time() - image_processing_start
             print(f"⚡ Image processing completed in {image_processing_duration:.3f}s")
             
-            # Upload images to Azure if needed
-            print(f"🔍 Total images queued for Azure upload: {len(images_to_upload)}")
-            if images_to_upload and not all_images_have_azure_urls:
-                print(f"🚀 Starting ULTRA-FAST Azure upload for {len(images_to_upload)} layer images")
+            # Upload images to storage if needed
+            print(f"🔍 Total images queued for storage upload: {len(images_to_upload)}")
+            if images_to_upload and not all_images_have_storage_urls:
+                print(f"📤 Starting storage upload for {len(images_to_upload)} layer images")
                 upload_start_time = time.time()
                 
-                # Use optimized multiprocessing with more workers for speed
-                max_workers = min(current_app.config.get('AZURE_UPLOAD_MAX_WORKERS', 8), len(images_to_upload))
-                print(f"⚡ Using {max_workers} parallel workers for maximum speed")
-                
-                # Prepare files for multiprocessing upload
-                files_to_upload = [(item['image_id'], item['file'], item['filename']) for item in images_to_upload]
-                
-                # Upload to Azure using multiprocessing
-                upload_results = upload_multiple_files_to_azure(files_to_upload, max_workers=max_workers)
+                # Upload each image using storage manager (handles both local and Azure)
+                for item in images_to_upload:
+                    try:
+                        result = StorageManager.upload_file(
+                            item['file'], 
+                            draft.id, 
+                            filename=item['filename'],
+                            subdirectory='layers'
+                        )
+                        
+                        if result:
+                            # Find the correct layer by ID
+                            target_layer = None
+                            for layer in processed_layers:
+                                if layer['layer_id'] == item['layer_id']:
+                                    target_layer = layer
+                                    break
+                            
+                            if target_layer and item['image_index'] < len(target_layer['images']):
+                                image = target_layer['images'][item['image_index']]
+                                image['url'] = result['url']
+                                image.pop('_needs_upload', None)  # Clean up temporary field
+                                print(f"✅ Successfully uploaded image {item['image_id']}: {result['url'][:50]}...")
+                            else:
+                                print(f"⚠️  Warning: Could not find layer {item['layer_id']} or image index {item['image_index']}")
+                        else:
+                            flash(f'Upload failed for image {item["image_id"]}', 'error')
+                            return render_template('study_creation/layer_config.html', form=form, draft=draft)
+                            
+                    except Exception as e:
+                        print(f"❌ Error uploading image {item['image_id']}: {str(e)}")
+                        flash(f'Upload failed for image {item["image_id"]}: {str(e)}', 'error')
+                        return render_template('study_creation/layer_config.html', form=form, draft=draft)
                 
                 upload_duration = time.time() - upload_start_time
-                print(f"⚡ ULTRA-FAST Azure upload completed in {upload_duration:.2f} seconds")
-                
-                # Performance validation
-                if upload_duration > 2.0:  # Should be under 2 seconds for 8 images
-                    print(f"⚠️  Upload took {upload_duration:.2f}s - investigating performance...")
-                else:
-                    print(f"🎯 Excellent performance! {upload_duration:.2f}s for {len(images_to_upload)} images")
-                
-                # Update processed layers with Azure URLs
-                for item in images_to_upload:
-                    # Find the corresponding upload result
-                    azure_url = None
-                    error_msg = None
-                    for result_image_id, result_azure_url, result_error_msg in upload_results:
-                        if result_image_id == item['image_id']:
-                            azure_url = result_azure_url
-                            error_msg = result_error_msg
-                            break
-                    
-                    if error_msg:
-                        flash(f'Upload failed for image {item["image_id"]}: {error_msg}', 'error')
-                        return render_template('study_creation/layer_config.html', form=form, draft=draft)
-                    
-                    # Update the image URL in the processed layer
-                    # Find the correct layer by ID
-                    target_layer = None
-                    for layer in processed_layers:
-                        if layer['layer_id'] == item['layer_id']:
-                            target_layer = layer
-                            break
-                    
-                    if target_layer and item['image_index'] < len(target_layer['images']):
-                        image = target_layer['images'][item['image_index']]
-                        image['url'] = azure_url
-                        image.pop('_needs_upload', None)  # Clean up temporary field
-                        print(f"✅ Successfully uploaded image {item['image_id']} to Azure: {azure_url[:50]}...")
-                    else:
-                        print(f"⚠️  Warning: Could not find layer {item['layer_id']} or image index {item['image_index']}")
-            elif all_images_have_azure_urls:
-                print("✅ All images already have Azure URLs from frontend batch upload - skipping upload")
+                print(f"📤 Storage upload completed in {upload_duration:.2f} seconds")
+            elif all_images_have_storage_urls:
+                print("✅ All images already have storage URLs from frontend batch upload - skipping upload")
             else:
-                print("✅ No new images to upload - all images already have Azure URLs")
+                print("✅ No new images to upload - all images already have storage URLs")
             
-            # Validate that all images now have Azure URLs
+            # Validate that all images now have storage URLs
             invalid_images = validate_image_urls(processed_layers)
             if invalid_images:
-                error_msg = f"Found {len(invalid_images)} images with invalid URLs. Please ensure all images are uploaded to Azure."
+                # Create more specific error message based on storage configuration
+                use_local_storage = current_app.config.get('USE_LOCAL_STORAGE', False)
+                storage_type = "local storage" if use_local_storage else "Azure storage"
+                error_msg = f"Found {len(invalid_images)} images with invalid URLs. Please ensure all images are uploaded to {storage_type}."
                 current_app.logger.error(error_msg)
                 for img in invalid_images:
                     current_app.logger.error(f"  - {img['layer']}: {img['image']} ({img['url_type']})")
                 flash(error_msg, 'error')
                 return render_template('study_creation/layer_config.html', form=form, draft=draft)
             
-            print(f"✅ All {sum(len(layer['images']) for layer in processed_layers)} images validated - all have Azure URLs")
+            print(f"✅ All {sum(len(layer['images']) for layer in processed_layers)} images validated - all have storage URLs")
             
             # Handle default background upload if provided
             default_background_data = None
@@ -2193,9 +2183,13 @@ def layer_config():
                 if background_file and background_file.filename != '':
                     print(f"📤 Processing default background: {background_file.filename}")
                     
-                    # Upload background to Azure
-                    from utils.azure_storage import upload_to_azure
-                    background_url = upload_to_azure(background_file)
+                    # Upload background using storage manager
+                    result = StorageManager.upload_file(
+                        background_file, 
+                        draft.id, 
+                        subdirectory='default_background'
+                    )
+                    background_url = result['url'] if result else None
                     
                     # Get file size without consuming the file content
                     current_pos = background_file.tell()
@@ -2310,18 +2304,17 @@ def upload_image():
             current_app.logger.error(f'Invalid file type: {file.filename}')
             return jsonify({'success': False, 'error': 'Invalid file type'})
         
-        current_app.logger.info('File validation passed, uploading to Azure...')
+        current_app.logger.info('File validation passed, uploading to storage...')
         
-        # Upload to Azure
-        from utils.azure_storage import upload_to_azure
-        azure_url = upload_to_azure(file)
+        # Upload using storage manager
+        result = StorageManager.upload_file(file, str(uuid.uuid4()))
         
-        if azure_url:
-            current_app.logger.info(f'Upload successful: {azure_url}')
-            return jsonify({'success': True, 'url': azure_url})
+        if result:
+            current_app.logger.info(f'Upload successful: {result["url"]}')
+            return jsonify({'success': True, 'url': result['url']})
         else:
-            current_app.logger.error('Azure upload returned None')
-            return jsonify({'success': False, 'error': 'Failed to upload to Azure'})
+            current_app.logger.error('Storage upload failed')
+            return jsonify({'success': False, 'error': 'Failed to upload to storage'})
             
     except Exception as e:
         current_app.logger.error(f'Image upload error: {str(e)}')
@@ -2335,23 +2328,63 @@ def allowed_file(filename):
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def is_valid_storage_url(url):
+    """Check if a URL is a valid storage URL (Azure or local storage)."""
+    if not url:
+        return False
+    
+    # Azure Blob Storage URL (must contain Azure-specific domains)
+    if url.startswith('http') and ('blob.core.windows.net' in url or 'azure' in url):
+        return True
+    
+    # Base64 data URL
+    if url.startswith('data:'):
+        return True
+    
+    # Local file path (contains '/' and has image extension, but not absolute path)
+    if ('/' in url and 
+        not url.startswith('/') and  # Not absolute path
+        any(url.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp'])):
+        return True
+    
+    return False
+
 def is_azure_url(url):
-    """Check if a URL is a valid Azure Blob Storage URL."""
+    """Check if a URL is a valid Azure Blob Storage URL (legacy function for backward compatibility)."""
     if not url:
         return False
     return url.startswith('http') and ('blob.core.windows.net' in url or 'azure' in url)
 
 def validate_image_urls(layers_data):
-    """Validate that all images in layers have Azure URLs, not base64 data."""
+    """Validate that all images in layers have valid storage URLs based on USE_LOCAL_STORAGE config."""
     invalid_images = []
+    
+    # Check storage configuration
+    use_local_storage = current_app.config.get('USE_LOCAL_STORAGE', False)
     
     for layer in layers_data:
         for image in layer.get('images', []):
-            if not is_azure_url(image.get('url')):
+            url = image.get('url', '')
+            
+            # Determine if URL is valid based on storage configuration
+            is_valid = False
+            if use_local_storage:
+                # For local storage, accept local file paths and base64 data URLs
+                is_valid = (url.startswith('data:') or 
+                           ('/' in url and not url.startswith('http') and 
+                            (url.startswith('/static/uploads/') or not url.startswith('/')) and 
+                            any(url.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp'])))
+            else:
+                # For Azure storage, accept Azure URLs and base64 data URLs
+                is_valid = (url.startswith('data:') or 
+                           (url.startswith('http') and ('blob.core.windows.net' in url or 'azure' in url)))
+            
+            if not is_valid:
                 invalid_images.append({
                     'layer': layer.get('name', 'Unknown'),
                     'image': image.get('name', 'Unknown'),
-                    'url_type': 'base64' if image.get('url', '').startswith('data:') else 'invalid'
+                    'url_type': 'base64' if url.startswith('data:') else 'invalid',
+                    'storage_mode': 'local' if use_local_storage else 'azure'
                 })
     
     return invalid_images
@@ -2359,12 +2392,9 @@ def validate_image_urls(layers_data):
 @study_creation_bp.route('/upload-layer-images', methods=['POST'])
 @login_required
 def upload_layer_images():
-    """Batch upload layer images to Azure Blob Storage using multiprocessing."""
-    start_time = time.time()
-    #print(f"⏱️  [PERF]Layer image batch upload started at {datetime.now().strftime('%H:%M:%S.%f')[:-3]}")
-    
+    """Batch upload layer images using storage manager (local or Azure based on config)."""
     try:
-        current_app.logger.info(f'Layer image batch upload request received')
+        print(f"📤 Layer image batch upload request received")
         
         # Get the JSON data containing image information
         data = request.get_json()
@@ -2375,70 +2405,158 @@ def upload_layer_images():
         if not images_data:
             return jsonify({'success': False, 'error': 'Empty images array'}), 400
         
-        current_app.logger.info(f'Processing {len(images_data)} layer images for batch upload')
+        print(f"📤 Processing {len(images_data)} layer images for upload")
         
-        # Prepare data for multiprocessing upload
-        files_to_upload = []
-        for img_data in images_data:
-            image_id = img_data.get('id')
-            file_data = img_data.get('file_data')  # Base64 encoded file data
-            
-            if not image_id or not file_data:
-                continue
-            
-            try:
-                # Convert base64 to file object
-                import base64
-                import io
-                import mimetypes
+        # Get study ID from request data
+        study_id = data.get('study_id')
+        if not study_id:
+            print("❌ No study_id provided in upload request")
+            return jsonify({'success': False, 'error': 'No study ID provided'}), 400
+        
+        print(f"📤 Using study ID: {study_id}")
+        
+        # Check storage configuration to determine upload strategy
+        use_local_storage = current_app.config.get('USE_LOCAL_STORAGE', False)
+        
+        if use_local_storage:
+            # Sequential local upload (already fast)
+            results = {}
+            for img_data in images_data:
+                image_id = img_data.get('id')
+                file_data = img_data.get('file_data')  # Base64 encoded file data
                 
-                # Extract base64 data and determine file type
-                if file_data.startswith('data:'):
-                    header, encoded = file_data.split(",", 1)
-                    image_data = base64.b64decode(encoded)
+                if not image_id or not file_data:
+                    results[image_id] = {'success': False, 'error': 'Missing image data'}
+                    continue
+                
+                try:
+                    # Convert base64 to file object
+                    import base64
+                    import io
+                    import mimetypes
                     
-                    # Determine file extension from MIME type
-                    mime_type = header.split(':')[1].split(';')[0]
-                    extension = mimetypes.guess_extension(mime_type) or '.png'
+                    # Extract base64 data and determine file type
+                    if file_data.startswith('data:'):
+                        header, encoded = file_data.split(",", 1)
+                        image_data = base64.b64decode(encoded)
+                        
+                        # Determine file extension from MIME type
+                        mime_type = header.split(':')[1].split(';')[0]
+                        extension = mimetypes.guess_extension(mime_type) or '.png'
+                    else:
+                        # Assume it's already base64 encoded
+                        image_data = base64.b64decode(file_data)
+                        extension = '.png'
+                    
+                    # Create a proper file-like object with filename attribute
+                    image_file = io.BytesIO(image_data)
+                    image_file.filename = f"{image_id}{extension}"
+                    image_file.seek(0)
+                    
+                    # Upload using storage manager (local storage)
+                    result = StorageManager.upload_file(
+                        image_file, 
+                        study_id, 
+                        filename=image_file.filename,
+                        subdirectory='layers'
+                    )
+                    
+                    if result:
+                        results[image_id] = {
+                            'success': True, 
+                            'url': result['url'],
+                            'file_path': result['file_path'],
+                            'filename': result['filename']
+                        }
+                        print(f"✅ Layer image {image_id} uploaded locally: {result['url']}")
+                    else:
+                        results[image_id] = {'success': False, 'error': 'Upload failed'}
+                        
+                except Exception as e:
+                    print(f"❌ Error uploading layer image {image_id}: {str(e)}")
+                    results[image_id] = {'success': False, 'error': str(e)}
+        else:
+            # Parallel Azure upload for better performance
+            print(f"🚀 Using parallel Azure upload for {len(images_data)} images")
+            
+            # Prepare all files for parallel upload
+            files_to_upload = []
+            image_ids = []
+            
+            for img_data in images_data:
+                image_id = img_data.get('id')
+                file_data = img_data.get('file_data')  # Base64 encoded file data
+                
+                if not image_id or not file_data:
+                    continue
+                
+                try:
+                    # Convert base64 to file object
+                    import base64
+                    import io
+                    import mimetypes
+                    
+                    # Extract base64 data and determine file type
+                    if file_data.startswith('data:'):
+                        header, encoded = file_data.split(",", 1)
+                        image_data = base64.b64decode(encoded)
+                        
+                        # Determine file extension from MIME type
+                        mime_type = header.split(':')[1].split(';')[0]
+                        extension = mimetypes.guess_extension(mime_type) or '.png'
+                    else:
+                        # Assume it's already base64 encoded
+                        image_data = base64.b64decode(file_data)
+                        extension = '.png'
+                    
+                    # Create a proper file-like object with filename attribute
+                    image_file = io.BytesIO(image_data)
+                    image_file.filename = f"{image_id}{extension}"
+                    image_file.seek(0)
+                    
+                    files_to_upload.append(image_file)
+                    image_ids.append(image_id)
+                    
+                except Exception as e:
+                    print(f"❌ Error preparing image {image_id}: {str(e)}")
+                    continue
+            
+            # Upload all files in parallel using StorageManager
+            upload_results = StorageManager.upload_multiple_files(
+                files_to_upload, 
+                study_id, 
+                subdirectory='layers'
+            )
+            
+            # Map results back to image IDs
+            results = {}
+            for i, result in enumerate(upload_results):
+                image_id = image_ids[i]
+                if result and 'url' in result:
+                    results[image_id] = {
+                        'success': True, 
+                        'url': result['url'],
+                        'file_path': result['file_path'],
+                        'filename': result['filename']
+                    }
+                    print(f"✅ Layer image {image_id} uploaded to Azure: {result['url']}")
                 else:
-                    # Assume it's already base64 encoded
-                    image_data = base64.b64decode(file_data)
-                    extension = '.png'
-                
-                # Create a proper file-like object
-                image_file = io.BytesIO(image_data)
-                image_file.name = f"{image_id}{extension}"
-                
-                # Ensure the file pointer is at the beginning
-                image_file.seek(0)
-                
-                files_to_upload.append((image_id, image_file, image_file.name))
-                
-            except Exception as e:
-                current_app.logger.error(f'Error processing image {image_id}: {str(e)}')
-                continue
-        
-        if not files_to_upload:
-            return jsonify({'success': False, 'error': 'No valid images to upload'}), 400
-        
-        current_app.logger.info(f'Starting multiprocessing upload for {len(files_to_upload)} layer images')
-        
-        # Use the new multiprocessing upload function
-        upload_results = upload_layer_images_to_azure(files_to_upload)
-        
-        # Process results
-        results = {}
-        for image_id, azure_url, error_msg in upload_results:
-            if error_msg:
-                results[image_id] = {'success': False, 'error': error_msg}
-            else:
-                results[image_id] = {'success': True, 'url': azure_url}
+                    results[image_id] = {
+                        'success': False, 
+                        'error': result.get('error', 'Upload failed') if result else 'Upload failed'
+                    }
+            
+            # Handle any images that failed preparation
+            for img_data in images_data:
+                image_id = img_data.get('id')
+                if image_id not in results:
+                    results[image_id] = {'success': False, 'error': 'Missing image data'}
         
         # Count successes and failures
         success_count = sum(1 for r in results.values() if r['success'])
         total_count = len(results)
         
-        current_app.logger.info(f'Layer image batch upload completed: {success_count}/{total_count} successful')
+        print(f"📤 Layer image batch upload completed: {success_count}/{total_count} successful")
         
         return jsonify({
             'success': True,
@@ -2451,7 +2569,7 @@ def upload_layer_images():
         })
         
     except Exception as e:
-        current_app.logger.error(f'Layer image batch upload error: {str(e)}')
+        print(f"❌ Layer image batch upload error: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @study_creation_bp.route('/layer-iped', methods=['GET', 'POST'])
@@ -2681,43 +2799,47 @@ def cleanup_base64_images():
                 mime_type = header.split(':')[1].split(';')[0]
                 extension = mimetypes.guess_extension(mime_type) or '.png'
                 
-                # Create file object
+                # Create file object with filename attribute
                 image_file = io.BytesIO(image_data)
-                image_file.name = f"{img['image_id']}{extension}"
+                image_file.filename = f"{img['image_id']}{extension}"
                 image_file.seek(0)
                 
-                files_to_upload.append((img['image_id'], image_file, image_file.name))
+                files_to_upload.append((img['image_id'], image_file, image_file.filename))
                 
             except Exception as e:
                 print(f"Error processing image {img['image_id']}: {str(e)}")
                 continue
         
         if files_to_upload:
-            print(f"Uploading {len(files_to_upload)} images to Azure...")
+            print(f"Uploading {len(files_to_upload)} images to storage...")
             
-            # Upload to Azure using multiprocessing
-            max_workers = min(current_app.config.get('AZURE_UPLOAD_MAX_WORKERS', 8), len(files_to_upload))
-            upload_results = upload_multiple_files_to_azure(files_to_upload, max_workers=max_workers)
-            
-            # Update database with Azure URLs
-            for img in base64_images:
-                # Find corresponding upload result
-                azure_url = None
-                for result_id, result_url, result_error in upload_results:
-                    if result_id == img['image_id']:
-                        azure_url = result_url
-                        break
-                
-                if azure_url:
-                    # Update the image URL in the database
-                    for layer in layers:
-                        if layer['layer_id'] == img['layer_id']:
-                            for image in layer['images']:
-                                if image['id'] == img['image_id']:
-                                    image['url'] = azure_url
-                                    print(f"✅ Updated {img['image_name']} with Azure URL: {azure_url[:50]}...")
+            # Upload each image using storage manager
+            for img_id, file_obj, filename in files_to_upload:
+                try:
+                    result = StorageManager.upload_file(
+                        file_obj, 
+                        draft.id, 
+                        filename=filename,
+                        subdirectory='layers'
+                    )
+                    
+                    if result:
+                        # Find the corresponding image in base64_images
+                        img = next((img for img in base64_images if img['image_id'] == img_id), None)
+                        if img:
+                            # Update the image URL in the database
+                            for layer in layers:
+                                if layer['layer_id'] == img['layer_id']:
+                                    for image in layer['images']:
+                                        if image['id'] == img['image_id']:
+                                            image['url'] = result['url']
+                                            print(f"✅ Updated {img['image_name']} with storage URL: {result['url'][:50]}...")
+                                            break
                                     break
-                            break
+                    else:
+                        print(f"❌ Failed to upload image {img_id}")
+                except Exception as e:
+                    print(f"❌ Error uploading image {img_id}: {str(e)}")
             
             # Save updated data
             draft.update_step_data('layer_config', {'layers': layers})
@@ -2798,16 +2920,22 @@ def grid_config():
                         uploaded_files[key] = file
                 
                 # Upload files and update content URLs
-                from utils.azure_storage import upload_to_azure
                 for category_index, category in enumerate(categories_data):
                     for element_index, element in enumerate(category['elements']):
                         if element.get('file'):  # New element with file
                             file_key = f'category_{category_index}_element_{element_index}_file'
                             if file_key in uploaded_files:
                                 try:
-                                    element_content = upload_to_azure(uploaded_files[file_key])
-                                    element['content'] = element_content
-                                    print(f"✅ Uploaded element: {element['name']} -> {element_content}")
+                                    result = StorageManager.upload_file(
+                                        uploaded_files[file_key], 
+                                        draft.id,
+                                        subdirectory='grid_categories'
+                                    )
+                                    if result:
+                                        element['content'] = result['url']
+                                        print(f"✅ Uploaded element: {element['name']} -> {result['url']}")
+                                    else:
+                                        print(f"❌ Failed to upload element file: {element['name']}")
                                 except Exception as e:
                                     print(f"❌ Error uploading element file: {str(e)}")
                                     flash(f'Error uploading element file: {str(e)}', 'error')
@@ -2929,19 +3057,16 @@ def grid_iped():
                     elements = category.get('elements', [])
                     category_info[category_name] = [f"element_{i+1}" for i in range(len(elements))]
                 
-                try:
-                    from utils.task_generation import plan_T_E_auto
-                    T, E, A_map, avg_k, A_min_used = plan_T_E_auto(
-                        category_info=category_info, 
-                        study_mode="grid", 
-                        max_active_per_row=min(4, len(category_info))  # GRID_MAX_ACTIVE = 4
-                    )
-                    tasks_per_consumer = T
-                    print(f"DEBUG: Grid IPED - Advanced algorithm calculated tasks_per_consumer: {tasks_per_consumer}")
-                except Exception as e:
-                    print(f"DEBUG: Grid IPED - Advanced algorithm failed ({e}), using fallback calculation")
-                    # Fallback to simple calculation
-                    tasks_per_consumer = max(8, min(24, total_elements * 2))  # 2 tasks per element, min 8, max 24
+                # Use unified task calculation
+                from utils.task_calculation import calculate_tasks_per_consumer
+                
+                tasks_per_consumer = calculate_tasks_per_consumer(
+                    total_elements=total_elements,
+                    category_info=category_info,
+                    study_mode="grid",
+                    use_advanced_algorithm=True
+                )
+                print(f"DEBUG: Grid IPED - Unified calculation - tasks_per_consumer: {tasks_per_consumer}")
             
             # Save IPED parameters
             iped_data = {
@@ -2987,7 +3112,7 @@ def grid_iped():
             category_info[category_name] = [f"element_{i+1}" for i in range(len(elements))]
         
         try:
-            from utils.task_generation import plan_T_E_auto
+            from utils.task_calculation import plan_T_E_auto
             T, E, A_map, avg_k, A_min_used = plan_T_E_auto(
                 category_info=category_info, 
                 study_mode="grid", 
@@ -3088,12 +3213,29 @@ def upload_immediate():
         
         print(f"📤 Uploading file: {file.filename}")
         
-        # Upload to Azure
-        from utils.azure_storage import upload_to_azure
-        file_url = upload_to_azure(file)
+        # Get draft ID from form data - this should always be provided now
+        draft_id = request.form.get('study_id')
+        if not draft_id:
+            print("❌ No study_id provided in upload request")
+            return jsonify({'error': 'No study ID provided'}), 400
         
-        print(f"✅ Upload successful: {file_url}")
-        return jsonify({'url': file_url, 'success': True})
+        subdirectory = request.form.get('subdirectory', 'grid_categories')
+        print(f"📤 Using existing draft ID: {draft_id}")
+        
+        # Upload using storage manager
+        result = StorageManager.upload_file(file, draft_id, subdirectory=subdirectory)
+        
+        if result:
+            print(f"✅ Upload successful: {result['url']}")
+            return jsonify({
+                'url': result['url'], 
+                'file_path': result['file_path'],
+                'filename': result['filename'],
+                'success': True
+            })
+        else:
+            print("❌ Upload failed")
+            return jsonify({'error': 'Upload failed'}), 500
         
     except Exception as e:
         print(f"❌ Error in immediate upload: {str(e)}")
